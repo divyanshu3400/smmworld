@@ -55,13 +55,6 @@ export default function TopBar() {
 
   return (
     <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center gap-x-4 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4 sm:px-6 lg:px-8">
-      <button
-        type="button"
-        className="lg:hidden -m-2.5 p-2.5 text-muted-foreground"
-      >
-        <Menu className="h-6 w-6" />
-      </button>
-
       <div className="flex flex-1 gap-x-4 self-stretch lg:gap-x-6">
         <form onSubmit={handleSearch} className="relative flex flex-1 items-center max-w-md">
           <Search className="absolute left-3 h-4 w-4 text-muted-foreground pointer-events-none" />
