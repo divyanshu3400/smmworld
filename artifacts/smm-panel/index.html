@@ -1,17 +1,363 @@
 <!DOCTYPE html>
 <html lang="en" class="dark">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect fill='%2310b981' rx='20' width='100' height='100'/><path fill='white' d='M65 25L35 55h15l-5 20 30-35H60l5-15z'/%3E</svg>" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="SMMHub - Scale Your Social Media With Confidence" />
-    <title>SMMHub - Social Media Marketing Platform</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
+
+<head>
+  <meta charset="UTF-8" />
+
+  <!-- ═══════════════════════════════════════════
+         FAVICON & APP ICONS
+    ═══════════════════════════════════════════ -->
+  <link rel="icon" type="image/svg+xml"
+    href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect fill='%236366f1' rx='20' width='100' height='100'/><text x='50' y='68' font-size='52' font-weight='900' font-family='Arial,sans-serif' text-anchor='middle' fill='white'>S</text></svg>" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+  <link rel="manifest" href="/site.webmanifest" />
+  <meta name="theme-color" content="#6366f1" />
+  <meta name="msapplication-TileColor" content="#6366f1" />
+
+  <!-- ═══════════════════════════════════════════
+         VIEWPORT & RENDERING
+    ═══════════════════════════════════════════ -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+
+  <!-- ═══════════════════════════════════════════
+         PRIMARY SEO META TAGS
+    ═══════════════════════════════════════════ -->
+  <title>SSMM – #1 SMM Panel | Buy Instagram, YouTube & TikTok Followers</title>
+  <meta name="description"
+    content="SSMM is the world's leading SMM panel to grow your social media accounts. Buy real Instagram followers, YouTube views, TikTok likes, Facebook fans & more. Instant delivery, cheapest prices, 24/7 support." />
+  <meta name="keywords"
+    content="SMM panel, buy Instagram followers, buy YouTube views, buy TikTok likes, social media marketing, cheapest SMM panel, real followers, SSMM, social media growth, buy Facebook likes, buy Twitter followers, SMM reseller panel" />
+  <meta name="author" content="SSMM" />
+  <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1" />
+  <meta name="googlebot" content="index, follow" />
+  <link rel="canonical" href="https://ssmm.online/" />
+
+  <!-- ═══════════════════════════════════════════
+         OPEN GRAPH (Facebook, LinkedIn, WhatsApp)
+    ═══════════════════════════════════════════ -->
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="SSMM" />
+  <meta property="og:title" content="SSMM – #1 SMM Panel | Buy Real Social Media Followers & Views" />
+  <meta property="og:description"
+    content="Grow your social media instantly with SSMM. Buy Instagram followers, YouTube views, TikTok likes & more. Cheapest prices, instant delivery, 100% real." />
+  <meta property="og:url" content="https://ssmm.online/" />
+  <meta property="og:image" content="https://ssmm.online/og-image.jpg" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="SSMM – Best SMM Panel for Social Media Growth" />
+  <meta property="og:locale" content="en_US" />
+
+  <!-- ═══════════════════════════════════════════
+         TWITTER / X CARD
+    ═══════════════════════════════════════════ -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:site" content="@ssmmonline" />
+  <meta name="twitter:creator" content="@ssmmonline" />
+  <meta name="twitter:title" content="SSMM – #1 SMM Panel | Instant Social Media Growth" />
+  <meta name="twitter:description"
+    content="Buy Instagram followers, YouTube views, TikTok likes & more at the lowest prices. Instant delivery guaranteed. Try SSMM today!" />
+  <meta name="twitter:image" content="https://ssmm.online/og-image.jpg" />
+  <meta name="twitter:image:alt" content="SSMM SMM Panel Dashboard" />
+
+  <!-- ═══════════════════════════════════════════
+         GEO & LANGUAGE
+    ═══════════════════════════════════════════ -->
+  <meta name="language" content="English" />
+  <link rel="alternate" hreflang="en" href="https://ssmm.online/" />
+  <link rel="alternate" hreflang="x-default" href="https://ssmm.online/" />
+
+  <!-- ═══════════════════════════════════════════
+         PERFORMANCE: DNS PREFETCH & PRECONNECT
+    ═══════════════════════════════════════════ -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="dns-prefetch" href="//fonts.googleapis.com" />
+  <link rel="dns-prefetch" href="//www.google-analytics.com" />
+  <link rel="dns-prefetch" href="//www.googletagmanager.com" />
+
+  <!-- ═══════════════════════════════════════════
+         FONTS
+    ═══════════════════════════════════════════ -->
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@700;800;900&display=swap"
+    rel="stylesheet" />
+
+  <!-- ═══════════════════════════════════════════
+         STRUCTURED DATA – JSON-LD
+         (AEO: Answers AI assistants, Google SGE,
+          featured snippets, rich results)
+    ═══════════════════════════════════════════ -->
+
+  <!-- 1. Organization -->
+  <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      "@id": "https://ssmm.online/#organization",
+      "name": "SSMM",
+      "alternateName": ["SSMM Panel", "SSMM Social Media Marketing"],
+      "url": "https://ssmm.online/",
+      "logo": {
+        "@type": "ImageObject",
+        "url": "https://ssmm.online/logo.png",
+        "width": 512,
+        "height": 512
+      },
+      "description": "SSMM is a leading SMM panel platform offering social media growth services including Instagram followers, YouTube views, TikTok likes, and more at the cheapest prices with instant delivery.",
+      "sameAs": [
+        "https://twitter.com/ssmmonline",
+        "https://t.me/ssmmonline",
+        "https://www.youtube.com/@ssmmonline"
+      ],
+      "contactPoint": {
+        "@type": "ContactPoint",
+        "contactType": "customer support",
+        "availableLanguage": "English",
+        "url": "https://ssmm.online/contact"
+      }
+    }
+    </script>
+
+  <!-- 2. WebSite + SearchAction (Sitelinks Search Box) -->
+  <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      "@id": "https://ssmm.online/#website",
+      "url": "https://ssmm.online/",
+      "name": "SSMM – Best SMM Panel",
+      "description": "Buy social media followers, likes, views, and subscribers at the cheapest prices with instant delivery.",
+      "publisher": {
+        "@id": "https://ssmm.online/#organization"
+      },
+      "potentialAction": {
+        "@type": "SearchAction",
+        "target": {
+          "@type": "EntryPoint",
+          "urlTemplate": "https://ssmm.online/services?q={search_term_string}"
+        },
+        "query-input": "required name=search_term_string"
+      }
+    }
+    </script>
+
+  <!-- 3. WebPage -->
+  <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebPage",
+      "@id": "https://ssmm.online/#webpage",
+      "url": "https://ssmm.online/",
+      "name": "SSMM – #1 SMM Panel | Buy Instagram, YouTube & TikTok Followers",
+      "isPartOf": { "@id": "https://ssmm.online/#website" },
+      "about": { "@id": "https://ssmm.online/#organization" },
+      "description": "Grow your social media accounts with SSMM. Buy real Instagram followers, YouTube views, TikTok likes at the cheapest prices. Instant delivery. 24/7 support.",
+      "breadcrumb": {
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+          {
+            "@type": "ListItem",
+            "position": 1,
+            "name": "Home",
+            "item": "https://ssmm.online/"
+          }
+        ]
+      }
+    }
+    </script>
+
+  <!-- 4. SoftwareApplication (SMM Panel as SaaS) -->
+  <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "SSMM Panel",
+      "applicationCategory": "BusinessApplication",
+      "operatingSystem": "Web, iOS, Android",
+      "url": "https://ssmm.online/",
+      "description": "SSMM is a professional SMM panel providing instant social media growth services for Instagram, YouTube, TikTok, Facebook, Twitter, and 30+ other platforms.",
+      "offers": {
+        "@type": "Offer",
+        "price": "0.001",
+        "priceCurrency": "USD",
+        "description": "Social media growth services starting from $0.001 per unit"
+      },
+      "aggregateRating": {
+        "@type": "AggregateRating",
+        "ratingValue": "4.9",
+        "reviewCount": "12840",
+        "bestRating": "5",
+        "worstRating": "1"
+      },
+      "featureList": [
+        "Instant delivery",
+        "Cheapest SMM prices",
+        "30+ social media platforms",
+        "API access for resellers",
+        "24/7 customer support",
+        "Drip-feed orders",
+        "Auto refill guarantee"
+      ]
+    }
+    </script>
+
+  <!-- 5. FAQ (AEO: directly answers common user questions in AI/SGE) -->
+  <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "What is SSMM?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "SSMM (ssmm.online) is a professional Social Media Marketing panel where you can buy followers, likes, views, comments, and subscribers for Instagram, YouTube, TikTok, Facebook, Twitter, and 30+ other platforms at the cheapest prices with instant delivery."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Is SSMM safe to use?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes. SSMM uses safe, high-quality delivery methods that comply with platform guidelines. Your account password is never required, and all services are delivered gradually to appear organic."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "How fast is delivery on SSMM?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Most SSMM orders start within minutes. Delivery speed depends on the specific service but the majority of orders are delivered within 0–24 hours."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "What social media platforms does SSMM support?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "SSMM supports 30+ platforms including Instagram, YouTube, TikTok, Facebook, Twitter (X), Telegram, Spotify, LinkedIn, Pinterest, Snapchat, Discord, and many more."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Does SSMM offer an API for resellers?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes. SSMM provides a full API that allows resellers and developers to automate orders, check balances, and integrate SSMM services into their own SMM panels."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "What payment methods does SSMM accept?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "SSMM accepts multiple payment methods including credit/debit cards, PayPal, cryptocurrency (Bitcoin, USDT), UPI, and various local payment options depending on your region."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "What is the minimum order on SSMM?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "SSMM has very low minimum order requirements, starting from as few as 10 units on most services, making it accessible for individuals and businesses of any size."
+          }
+        }
+      ]
+    }
+    </script>
+
+  <!-- 6. ItemList – Top Services (Helps SGE list your services) -->
+  <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "ItemList",
+      "name": "SSMM Top Social Media Services",
+      "description": "Most popular SMM services available on SSMM panel",
+      "url": "https://ssmm.online/services",
+      "itemListElement": [
+        {
+          "@type": "ListItem",
+          "position": 1,
+          "name": "Buy Instagram Followers",
+          "url": "https://ssmm.online/services?platform=instagram&type=followers"
+        },
+        {
+          "@type": "ListItem",
+          "position": 2,
+          "name": "Buy YouTube Views",
+          "url": "https://ssmm.online/services?platform=youtube&type=views"
+        },
+        {
+          "@type": "ListItem",
+          "position": 3,
+          "name": "Buy TikTok Followers",
+          "url": "https://ssmm.online/services?platform=tiktok&type=followers"
+        },
+        {
+          "@type": "ListItem",
+          "position": 4,
+          "name": "Buy Facebook Page Likes",
+          "url": "https://ssmm.online/services?platform=facebook&type=likes"
+        },
+        {
+          "@type": "ListItem",
+          "position": 5,
+          "name": "Buy Twitter (X) Followers",
+          "url": "https://ssmm.online/services?platform=twitter&type=followers"
+        },
+        {
+          "@type": "ListItem",
+          "position": 6,
+          "name": "Buy Telegram Members",
+          "url": "https://ssmm.online/services?platform=telegram&type=members"
+        },
+        {
+          "@type": "ListItem",
+          "position": 7,
+          "name": "Buy Spotify Streams",
+          "url": "https://ssmm.online/services?platform=spotify&type=streams"
+        }
+      ]
+    }
+    </script>
+
+  <!-- 7. BreadcrumbList (extra for rich results) -->
+  <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        {
+          "@type": "ListItem",
+          "position": 1,
+          "name": "SSMM Home",
+          "item": "https://ssmm.online/"
+        }
+      ]
+    }
+    </script>
+
+  <!-- ═══════════════════════════════════════════
+         PERFORMANCE HINTS
+    ═══════════════════════════════════════════ -->
+  <link rel="preload" href="/src/main.tsx" as="script" />
+  <!-- Google tag (gtag.js) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-M0KERR5091"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag() { dataLayer.push(arguments); }
+    gtag('js', new Date());
+    gtag('config', 'G-M0KERR5091');
+  </script>
+</head>
+
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"></script>
+</body>
+
 </html>
