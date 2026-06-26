@@ -1,0 +1,155 @@
+You are a senior full-stack architect.
+
+Analyze the entire codebase and completely refactor the WorldOfSMM API integration to be production-ready.
+
+Current Problems:
+
+1. The WorldOfSMM API key is hardcoded in the frontend.
+2. API requests are being made directly from the browser.
+3. Browser requests fail due to CORS restrictions.
+4. The API key is publicly exposed and can be abused.
+5. Wallet balance, services, order creation, and order status logic are tightly coupled to frontend code.
+6. Security is poor because users can inspect the API key from DevTools.
+
+Requirements:
+
+### Architecture
+
+Move all WorldOfSMM API communication to secure backend/edge functions.
+
+Create a dedicated backend layer:
+
+* GET /api/smm/services
+* GET /api/smm/balance
+* POST /api/smm/order
+* GET /api/smm/order/:id
+* POST /api/smm/cancel
+
+The frontend must NEVER communicate directly with:
+https://worldofsmm.com/api/v2
+
+The frontend must ONLY communicate with our backend endpoints.
+
+### Secrets
+
+Remove the hardcoded API key completely.
+
+Store the WorldOfSMM API key inside Replit Secrets / Environment Variables.
+
+Example:
+
+WORLD_OF_SMM_API_KEY=xxxx
+
+The API key must only exist server-side.
+
+### Service Layer
+
+Create:
+
+server/services/smmService.ts
+
+This service should:
+
+* handle all WorldOfSMM requests
+* centralize error handling
+* centralize request building
+* validate responses
+* retry transient failures
+* log errors safely
+
+### Frontend Refactor
+
+Find every place where:
+
+* smmApi.getServices()
+* smmApi.getBalance()
+* smmApi.createOrder()
+* smmApi.getOrderStatus()
+* smmApi.cancelOrder()
+
+are used.
+
+Replace them with calls to our backend API endpoints.
+
+Remove direct usage of WorldOfSMM from frontend code.
+
+### Wallet System
+
+Audit the wallet implementation.
+
+Requirements:
+
+1. User balance must come from our database.
+2. Do NOT use WorldOfSMM balance as the user wallet.
+3. User wallet and provider wallet must be separate.
+4. Deduct user wallet before placing an order.
+5. Create database transaction records.
+6. Refund automatically if order creation fails.
+7. Prevent negative balances.
+
+### Orders
+
+Create proper order flow:
+
+1. User creates order.
+2. Validate service.
+3. Calculate cost.
+4. Verify wallet balance.
+5. Deduct balance.
+6. Create local order record.
+7. Submit order to WorldOfSMM.
+8. Store provider order ID.
+9. Update order status.
+10. Refund on failure.
+
+### Database
+
+Review all tables related to:
+
+* users
+* wallets
+* orders
+* transactions
+* services
+
+Create migrations if necessary.
+
+Add missing foreign keys and indexes.
+
+### Services Sync
+
+Create a scheduled background sync:
+
+* fetch services periodically
+* store them locally
+* serve services from database
+* avoid hitting provider API on every page load
+
+### Security
+
+Implement:
+
+* request validation
+* rate limiting
+* input sanitization
+* proper HTTP status codes
+* centralized error handling
+* secure logging
+
+### Final Deliverables
+
+1. Remove all frontend WorldOfSMM API calls.
+2. Create secure backend API routes.
+3. Move API key to environment variables.
+4. Refactor wallet flow.
+5. Refactor order flow.
+6. Update all affected pages/components.
+7. Produce a report listing:
+
+   * files changed
+   * new files created
+   * security improvements
+   * database changes
+   * remaining risks
+8. Do not use any CORS bypass solutions or proxy hacks.
+9. Implement a production-grade architecture suitable for deployment.

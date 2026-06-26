@@ -1,0 +1,2 @@
+- [Admin panel auth](admin-panel-auth.md) — admin check uses ADMIN_EMAILS env var (comma-sep) OR Supabase app_metadata.role="admin"; both supported simultaneously
+- [Backend SMM architecture](backend-smm-arch.md) — all WorldOfSMM API calls are server-side only; frontend never touches the key; wallet deducted before provider call, refunded on failure

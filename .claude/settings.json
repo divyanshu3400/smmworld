@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": []
+  },
+  "env": {
+    "npm_config_user_agent": "pnpm/9.0.0"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "$schema": "https://schema.railpack.com",
+  "provider": "node",
+  "steps": {
+    "install": {
+      "commands": [
+        "pnpm install --frozen-lockfile --prefer-offline"
+      ]
+    },
+    "build": {
+      "inputs": [{ "step": "install" }],
+      "commands": [
+        "pnpm run build:libs",
+        "pnpm --filter @workspace/smm-panel run build"
+      ]
+    }
+  }
+}
