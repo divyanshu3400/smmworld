@@ -6,6 +6,8 @@ import {
   ArrowRight, Check, Star, ChevronDown, ChevronUp,
   TrendingUp, Users, ShoppingCart, Award,
 } from 'lucide-react'
+import { usePublicStats } from '@/hooks/usePublicStats'
+import { CountUp } from '@/components/ui/CountUp'
 
 const fadeUp = {
   hidden: { opacity: 0, y: 24 },
@@ -23,32 +25,13 @@ const platforms = [
   { name: 'LinkedIn', color: 'from-blue-700 to-blue-800', path: 'M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z' },
 ]
 
-const stats = [
-  { value: '500K+', label: 'Orders Completed', icon: ShoppingCart },
-  { value: '150K+', label: 'Happy Customers', icon: Users },
-  { value: '1,000+', label: 'Services Available', icon: Award },
-  { value: '99.9%', label: 'Uptime Guaranteed', icon: TrendingUp },
-]
-
-const steps = [
-  {
-    step: '01',
-    title: 'Create Account',
-    description: 'Sign up for free in seconds. No credit card required to get started.',
-    icon: 'M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z',
-  },
-  {
-    step: '02',
-    title: 'Add Funds',
-    description: 'Top up your wallet with UPI, cards, or crypto. Funds available instantly.',
-    icon: 'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
-  },
-  {
-    step: '03',
-    title: 'Place Your Order',
-    description: 'Choose any service, paste your link, and watch your growth happen live.',
-    icon: 'M13 7h8m0 0v8m0-8l-8 8-4-4-6 6',
-  },
+const features = [
+  { icon: Zap, title: 'Instant Delivery', description: 'Orders start within seconds. Real-time progress tracking from your dashboard.' },
+  { icon: Shield, title: 'Safe & Secure', description: 'We never ask for your password. Only your public profile link is needed.' },
+  { icon: RefreshCcw, title: 'Refill Guarantee', description: 'Experiencing drops? We refill your order for free within the guarantee period.' },
+  { icon: Clock, title: 'Always On', description: '99.9% uptime with automated order processing running 24/7 with no downtime.' },
+  { icon: Headphones, title: '24/7 Support', description: 'Our expert team is available around the clock via live chat and email.' },
+  { icon: BarChart2, title: 'Live Order Tracking', description: 'Monitor your order completion in real-time directly from your dashboard.' },
 ]
 
 const services = [
@@ -60,19 +43,10 @@ const services = [
   { platform: 'TikTok', service: 'Views', price: '$0.20', per: 'per 1000', features: ['Real Views', 'Viral Boost Ready', 'Instant Delivery'], badge: null },
 ]
 
-const features = [
-  { icon: Zap, title: 'Instant Delivery', description: 'Orders start within seconds. Real-time progress tracking from your dashboard.' },
-  { icon: Shield, title: 'Safe & Secure', description: 'We never ask for your password. Only your public profile link is needed.' },
-  { icon: RefreshCcw, title: 'Refill Guarantee', description: 'Experiencing drops? We refill your order for free within the guarantee period.' },
-  { icon: Clock, title: 'Always On', description: '99.9% uptime with automated order processing running 24/7 with no downtime.' },
-  { icon: Headphones, title: '24/7 Support', description: 'Our expert team is available around the clock via live chat and email.' },
-  { icon: BarChart2, title: 'Live Order Tracking', description: 'Monitor your order completion in real-time directly from your dashboard.' },
-]
-
 const testimonials = [
   { name: 'Arjun Sharma', handle: '@arjun.smm', avatar: 'AS', rating: 5, text: 'Switched from 3 different panels to SMMHub and never looked back. The delivery speed and quality is unmatched. My clients love the results.' },
   { name: 'Priya Nair', handle: '@priya_digital', avatar: 'PN', rating: 5, text: 'Finally a panel that actually works in India with UPI payments. Orders process within minutes and support is incredibly responsive.' },
-  { name: 'Rahul Mehta', handle: '@rahulmehta_ig', avatar: 'RM', rating: 5, text: 'Running an agency and SMMHub has completely transformed how we deliver results. The API integration is smooth and the prices are the best I\'ve found.' },
+  { name: 'Rahul Mehta', handle: '@rahulmehta_ig', avatar: 'RM', rating: 5, text: 'Running an agency and SMMHub has completely transformed how we deliver results. The API integration is smooth and the prices are the best.' },
 ]
 
 const faqs = [
@@ -83,33 +57,46 @@ const faqs = [
   { q: 'Do you support API access?', a: 'Yes! We provide a full REST API compatible with standard SMM panel APIs. Perfect for agencies and resellers who want to automate orders.' },
 ]
 
+function formatCompact(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M+`
+  if (n >= 1_000) return `${Math.floor(n / 1_000)}K+`
+  return n.toLocaleString()
+}
+
 export default function HomePage() {
   const [openFaq, setOpenFaq] = useState<number | null>(null)
+  const { data: stats, isLoading: statsLoading } = usePublicStats()
+
+  const totalOrders = stats?.totalOrders ?? 0
+  const totalCustomers = stats?.totalCustomers ?? 0
+  const ordersToday = stats?.ordersToday ?? 0
+
+  const statCards = [
+    { value: totalOrders, label: 'Orders Completed', icon: ShoppingCart, suffix: '+', fallback: '500K+' },
+    { value: totalCustomers, label: 'Happy Customers', icon: Users, suffix: '+', fallback: '150K+' },
+    { value: 1000, label: 'Services Available', icon: Award, suffix: '+', fallback: '1,000+' },
+    { value: 99, label: 'Uptime Guaranteed', icon: TrendingUp, suffix: '.9%', fallback: '99.9%' },
+  ]
 
   return (
     <div className="min-h-screen bg-background">
 
       {/* ── Hero ── */}
       <section className="relative overflow-hidden min-h-[92vh] flex items-center">
-        {/* background orbs */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           <div className="absolute -top-40 -right-40 w-[600px] h-[600px] rounded-full bg-emerald-500/10 dark:bg-emerald-500/8 blur-[120px]" />
           <div className="absolute -bottom-40 -left-40 w-[500px] h-[500px] rounded-full bg-teal-500/8 dark:bg-teal-500/6 blur-[100px]" />
           <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-[800px] h-[2px] bg-gradient-to-r from-transparent via-emerald-500/20 to-transparent" />
         </div>
-
-        {/* subtle grid */}
         <div
           className="absolute inset-0 opacity-[0.025] dark:opacity-[0.04]"
-          style={{
-            backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' xmlns='http://www.w3.org/2000/svg'%3E%3Cdefs%3E%3Cpattern id='g' width='60' height='60' patternUnits='userSpaceOnUse'%3E%3Cpath d='M 60 0 L 0 0 0 60' fill='none' stroke='%2310b981' stroke-width='1'/%3E%3C/pattern%3E%3C/defs%3E%3Crect width='100%25' height='100%25' fill='url(%23g)'/%3E%3C/svg%3E")`,
-          }}
+          style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' xmlns='http://www.w3.org/2000/svg'%3E%3Cdefs%3E%3Cpattern id='g' width='60' height='60' patternUnits='userSpaceOnUse'%3E%3Cpath d='M 60 0 L 0 0 0 60' fill='none' stroke='%2310b981' stroke-width='1'/%3E%3C/pattern%3E%3C/defs%3E%3Crect width='100%25' height='100%25' fill='url(%23g)'/%3E%3C/svg%3E")` }}
         />
 
         <div className="relative w-full px-6 py-28 mx-auto max-w-7xl sm:py-36 lg:py-44">
           <div className="grid lg:grid-cols-2 gap-16 items-center">
 
-            {/* left content */}
+            {/* Left */}
             <motion.div initial="hidden" animate="show" variants={{ show: { transition: { staggerChildren: 0.1 } } }}>
               <motion.div variants={fadeUp} className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-sm font-medium mb-6">
                 <span className="relative flex h-2 w-2">
@@ -133,17 +120,10 @@ export default function HomePage() {
               </motion.p>
 
               <motion.div variants={fadeUp} className="mt-10 flex flex-col sm:flex-row gap-3">
-                <Link
-                  to="/signup"
-                  className="inline-flex items-center justify-center gap-2 rounded-full bg-emerald-500 px-8 py-4 text-base font-semibold text-white shadow-lg shadow-emerald-500/30 hover:bg-emerald-600 hover:shadow-emerald-500/40 hover:-translate-y-0.5 transition-all duration-200"
-                >
-                  Get Started Free
-                  <ArrowRight className="h-4 w-4" />
+                <Link to="/signup" className="inline-flex items-center justify-center gap-2 rounded-full bg-emerald-500 px-8 py-4 text-base font-semibold text-white shadow-lg shadow-emerald-500/30 hover:bg-emerald-600 hover:shadow-emerald-500/40 hover:-translate-y-0.5 transition-all duration-200">
+                  Get Started Free <ArrowRight className="h-4 w-4" />
                 </Link>
-                <Link
-                  to="/services"
-                  className="inline-flex items-center justify-center gap-2 rounded-full bg-card border border-border px-8 py-4 text-base font-semibold text-foreground hover:border-emerald-500/40 hover:bg-accent transition-all duration-200"
-                >
+                <Link to="/services" className="inline-flex items-center justify-center gap-2 rounded-full bg-card border border-border px-8 py-4 text-base font-semibold text-foreground hover:border-emerald-500/40 hover:bg-accent transition-all duration-200">
                   Browse Services
                 </Link>
               </motion.div>
@@ -151,14 +131,13 @@ export default function HomePage() {
               <motion.div variants={fadeUp} className="mt-10 flex flex-wrap items-center gap-x-6 gap-y-3 text-sm text-muted-foreground">
                 {['No credit card required', 'Instant setup', '24/7 support'].map(t => (
                   <span key={t} className="flex items-center gap-1.5">
-                    <Check className="h-4 w-4 text-emerald-500" />
-                    {t}
+                    <Check className="h-4 w-4 text-emerald-500" />{t}
                   </span>
                 ))}
               </motion.div>
             </motion.div>
 
-            {/* right — decorative dashboard card */}
+            {/* Right — live dashboard card */}
             <motion.div
               initial={{ opacity: 0, x: 40 }}
               animate={{ opacity: 1, x: 0 }}
@@ -166,17 +145,38 @@ export default function HomePage() {
               className="hidden lg:block"
             >
               <div className="relative">
-                {/* main card */}
                 <div className="rounded-2xl bg-card border border-border p-6 shadow-2xl">
                   <div className="flex items-center justify-between mb-5">
                     <div>
                       <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">Total Orders</p>
-                      <p className="text-3xl font-bold text-foreground mt-0.5">12,849</p>
+                      <p className="text-3xl font-bold text-foreground mt-0.5">
+                        {statsLoading ? (
+                          <span className="animate-pulse text-muted-foreground">—</span>
+                        ) : (
+                          <CountUp end={totalOrders} duration={1600} />
+                        )}
+                      </p>
                     </div>
                     <div className="h-12 w-12 rounded-xl bg-emerald-500/10 flex items-center justify-center">
                       <TrendingUp className="h-6 w-6 text-emerald-500" />
                     </div>
                   </div>
+
+                  {/* Live indicator */}
+                  <div className="flex items-center gap-2 mb-5 px-3 py-2 rounded-lg bg-emerald-500/5 border border-emerald-500/15">
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                    </span>
+                    <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+                      {statsLoading ? 'Loading...' : (
+                        <>
+                          <CountUp end={ordersToday} duration={1200} /> orders placed today
+                        </>
+                      )}
+                    </span>
+                  </div>
+
                   <div className="space-y-3">
                     {[
                       { label: 'Instagram Followers', pct: 82, color: 'bg-pink-500' },
@@ -185,8 +185,7 @@ export default function HomePage() {
                     ].map(item => (
                       <div key={item.label}>
                         <div className="flex justify-between text-xs text-muted-foreground mb-1">
-                          <span>{item.label}</span>
-                          <span>{item.pct}%</span>
+                          <span>{item.label}</span><span>{item.pct}%</span>
                         </div>
                         <div className="h-1.5 bg-muted rounded-full overflow-hidden">
                           <motion.div
@@ -201,7 +200,7 @@ export default function HomePage() {
                   </div>
                 </div>
 
-                {/* floating stat pill — top right */}
+                {/* Floating pill — delivery time */}
                 <motion.div
                   initial={{ opacity: 0, y: -10 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -217,7 +216,7 @@ export default function HomePage() {
                   </div>
                 </motion.div>
 
-                {/* floating stat pill — bottom left */}
+                {/* Floating pill — happy clients */}
                 <motion.div
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -229,7 +228,9 @@ export default function HomePage() {
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">Happy Clients</p>
-                    <p className="text-sm font-bold text-foreground">150,000+</p>
+                    <p className="text-sm font-bold text-foreground">
+                      {statsLoading ? '—' : formatCompact(totalCustomers)}
+                    </p>
                   </div>
                 </motion.div>
               </div>
@@ -243,21 +244,21 @@ export default function HomePage() {
       <section className="py-14 border-y border-border bg-card/50">
         <div className="px-6 mx-auto max-w-7xl">
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-8">
-            {stats.map((s, i) => (
+            {statCards.map((s, i) => (
               <motion.div
                 key={s.label}
-                initial="hidden"
-                whileInView="show"
-                viewport={{ once: true }}
-                custom={i}
-                variants={fadeUp}
+                initial="hidden" whileInView="show" viewport={{ once: true }} custom={i} variants={fadeUp}
                 className="flex flex-col items-center text-center gap-2"
               >
                 <div className="h-11 w-11 rounded-xl bg-emerald-500/10 flex items-center justify-center mb-1">
                   <s.icon className="h-5 w-5 text-emerald-500" />
                 </div>
                 <div className="text-3xl sm:text-4xl font-bold bg-gradient-to-r from-emerald-500 to-teal-400 bg-clip-text text-transparent">
-                  {s.value}
+                  {statsLoading || s.value === 0 ? (
+                    s.fallback
+                  ) : (
+                    <CountUp end={s.value} suffix={s.suffix} duration={1800} />
+                  )}
                 </div>
                 <div className="text-sm text-muted-foreground font-medium">{s.label}</div>
               </motion.div>
@@ -269,21 +270,14 @@ export default function HomePage() {
       {/* ── Platform Marquee ── */}
       <section className="py-16 overflow-hidden">
         <div className="px-6 mx-auto max-w-7xl mb-10 text-center">
-          <p className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">
-            All platforms supported
-          </p>
+          <p className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">All platforms supported</p>
         </div>
         <div className="relative">
           <div className="flex animate-marquee gap-6 w-max">
             {[...platforms, ...platforms].map((p, i) => (
-              <div
-                key={i}
-                className="flex items-center gap-3 px-5 py-3 rounded-xl bg-card border border-border whitespace-nowrap shrink-0"
-              >
+              <div key={i} className="flex items-center gap-3 px-5 py-3 rounded-xl bg-card border border-border whitespace-nowrap shrink-0">
                 <div className={`h-8 w-8 rounded-lg bg-gradient-to-br ${p.color} flex items-center justify-center`}>
-                  <svg className="h-4 w-4 text-white" viewBox="0 0 24 24" fill="currentColor">
-                    <path d={p.path} />
-                  </svg>
+                  <svg className="h-4 w-4 text-white" viewBox="0 0 24 24" fill="currentColor"><path d={p.path} /></svg>
                 </div>
                 <span className="text-sm font-medium text-foreground">{p.name}</span>
               </div>
@@ -297,25 +291,18 @@ export default function HomePage() {
       {/* ── How It Works ── */}
       <section id="how-it-works" className="py-24 px-6 bg-card/30">
         <div className="mx-auto max-w-7xl">
-          <motion.div
-            initial="hidden" whileInView="show" viewport={{ once: true }} variants={fadeUp}
-            className="text-center mb-16"
-          >
+          <motion.div initial="hidden" whileInView="show" viewport={{ once: true }} variants={fadeUp} className="text-center mb-16">
             <p className="text-sm font-semibold uppercase tracking-widest text-emerald-600 dark:text-emerald-400 mb-3">Simple Process</p>
             <h2 className="text-3xl sm:text-5xl font-bold text-foreground">Up and running in minutes</h2>
-            <p className="mt-4 text-lg text-muted-foreground max-w-xl mx-auto">
-              No technical knowledge needed. Place your first order in under 2 minutes.
-            </p>
+            <p className="mt-4 text-lg text-muted-foreground max-w-xl mx-auto">No technical knowledge needed. Place your first order in under 2 minutes.</p>
           </motion.div>
-
           <div className="grid md:grid-cols-3 gap-4 relative">
-            {/* connecting line */}
-            <div className="hidden md:block absolute top-16 left-1/3 right-1/3 h-px bg-gradient-to-r from-emerald-500/40 via-emerald-500/20 to-emerald-500/40" style={{ top: '4rem' }} />
-
-            {steps.map((item, i) => (
-              <motion.div
-                key={item.step}
-                initial="hidden" whileInView="show" viewport={{ once: true }} custom={i} variants={fadeUp}
+            {[
+              { step: '01', title: 'Create Account', description: 'Sign up for free in seconds. No credit card required to get started.', icon: 'M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z' },
+              { step: '02', title: 'Add Funds', description: 'Top up your wallet with UPI, cards, or crypto. Funds available instantly.', icon: 'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z' },
+              { step: '03', title: 'Place Your Order', description: 'Choose any service, paste your link, and watch your growth happen live.', icon: 'M13 7h8m0 0v8m0-8l-8 8-4-4-6 6' },
+            ].map((item, i) => (
+              <motion.div key={item.step} initial="hidden" whileInView="show" viewport={{ once: true }} custom={i} variants={fadeUp}
                 className="relative flex flex-col items-center text-center p-8 rounded-2xl bg-card border border-border hover:border-emerald-500/30 transition-colors"
               >
                 <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-bold tracking-wider">
@@ -336,22 +323,14 @@ export default function HomePage() {
 
       {/* ── Popular Services ── */}
       <section id="services" className="py-24 px-6 mx-auto max-w-7xl">
-        <motion.div
-          initial="hidden" whileInView="show" viewport={{ once: true }} variants={fadeUp}
-          className="text-center mb-16"
-        >
+        <motion.div initial="hidden" whileInView="show" viewport={{ once: true }} variants={fadeUp} className="text-center mb-16">
           <p className="text-sm font-semibold uppercase tracking-widest text-emerald-600 dark:text-emerald-400 mb-3">Services</p>
           <h2 className="text-3xl sm:text-5xl font-bold text-foreground">Most Popular Services</h2>
-          <p className="mt-4 text-lg text-muted-foreground max-w-xl mx-auto">
-            Hand-picked services with the best quality-to-price ratio
-          </p>
+          <p className="mt-4 text-lg text-muted-foreground max-w-xl mx-auto">Hand-picked services with the best quality-to-price ratio</p>
         </motion.div>
-
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
           {services.map((item, i) => (
-            <motion.div
-              key={i}
-              initial="hidden" whileInView="show" viewport={{ once: true }} custom={i % 3} variants={fadeUp}
+            <motion.div key={i} initial="hidden" whileInView="show" viewport={{ once: true }} custom={i % 3} variants={fadeUp}
               className="group relative rounded-2xl bg-card border border-border p-6 hover:border-emerald-500/40 hover:shadow-lg hover:shadow-emerald-500/5 transition-all duration-300"
             >
               {item.badge && (
@@ -361,9 +340,7 @@ export default function HomePage() {
               )}
               <div className="flex items-start justify-between mb-5">
                 <div>
-                  <span className="inline-block px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-semibold mb-2">
-                    {item.platform}
-                  </span>
+                  <span className="inline-block px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-semibold mb-2">{item.platform}</span>
                   <h3 className="text-xl font-bold text-foreground">{item.service}</h3>
                 </div>
                 <div className="text-right">
@@ -374,21 +351,16 @@ export default function HomePage() {
               <ul className="space-y-2 mb-5">
                 {item.features.map((f, fi) => (
                   <li key={fi} className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Check className="h-4 w-4 text-emerald-500 shrink-0" />
-                    {f}
+                    <Check className="h-4 w-4 text-emerald-500 shrink-0" />{f}
                   </li>
                 ))}
               </ul>
-              <Link
-                to="/services"
-                className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-sm font-semibold hover:bg-emerald-500/20 transition-colors group-hover:gap-3"
-              >
+              <Link to="/services" className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-sm font-semibold hover:bg-emerald-500/20 transition-colors group-hover:gap-3">
                 Order Now <ArrowRight className="h-4 w-4 transition-all" />
               </Link>
             </motion.div>
           ))}
         </div>
-
         <div className="mt-12 text-center">
           <Link to="/services" className="inline-flex items-center gap-2 text-emerald-600 dark:text-emerald-400 font-semibold hover:gap-3 transition-all">
             Explore all 1,000+ services <ArrowRight className="h-4 w-4" />
@@ -399,22 +371,14 @@ export default function HomePage() {
       {/* ── Features ── */}
       <section className="py-24 px-6 bg-card/30">
         <div className="mx-auto max-w-7xl">
-          <motion.div
-            initial="hidden" whileInView="show" viewport={{ once: true }} variants={fadeUp}
-            className="text-center mb-16"
-          >
+          <motion.div initial="hidden" whileInView="show" viewport={{ once: true }} variants={fadeUp} className="text-center mb-16">
             <p className="text-sm font-semibold uppercase tracking-widest text-emerald-600 dark:text-emerald-400 mb-3">Why Us</p>
             <h2 className="text-3xl sm:text-5xl font-bold text-foreground">Built for serious growth</h2>
-            <p className="mt-4 text-lg text-muted-foreground max-w-xl mx-auto">
-              Every feature is designed around reliability, speed, and your account's safety
-            </p>
+            <p className="mt-4 text-lg text-muted-foreground max-w-xl mx-auto">Every feature is designed around reliability, speed, and your account's safety</p>
           </motion.div>
-
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {features.map((f, i) => (
-              <motion.div
-                key={i}
-                initial="hidden" whileInView="show" viewport={{ once: true }} custom={i % 3} variants={fadeUp}
+              <motion.div key={i} initial="hidden" whileInView="show" viewport={{ once: true }} custom={i % 3} variants={fadeUp}
                 className="flex gap-4 p-6 rounded-2xl bg-card border border-border hover:border-emerald-500/30 transition-colors"
               >
                 <div className="shrink-0 h-12 w-12 rounded-xl bg-emerald-500/10 flex items-center justify-center">
@@ -432,22 +396,13 @@ export default function HomePage() {
 
       {/* ── Testimonials ── */}
       <section className="py-24 px-6 mx-auto max-w-7xl">
-        <motion.div
-          initial="hidden" whileInView="show" viewport={{ once: true }} variants={fadeUp}
-          className="text-center mb-16"
-        >
+        <motion.div initial="hidden" whileInView="show" viewport={{ once: true }} variants={fadeUp} className="text-center mb-16">
           <p className="text-sm font-semibold uppercase tracking-widest text-emerald-600 dark:text-emerald-400 mb-3">Testimonials</p>
           <h2 className="text-3xl sm:text-5xl font-bold text-foreground">Trusted by thousands</h2>
-          <p className="mt-4 text-lg text-muted-foreground max-w-xl mx-auto">
-            Don't just take our word for it
-          </p>
         </motion.div>
-
         <div className="grid md:grid-cols-3 gap-6">
           {testimonials.map((t, i) => (
-            <motion.div
-              key={i}
-              initial="hidden" whileInView="show" viewport={{ once: true }} custom={i} variants={fadeUp}
+            <motion.div key={i} initial="hidden" whileInView="show" viewport={{ once: true }} custom={i} variants={fadeUp}
               className="flex flex-col p-6 rounded-2xl bg-card border border-border"
             >
               <div className="flex gap-1 mb-4">
@@ -473,25 +428,16 @@ export default function HomePage() {
       {/* ── FAQ ── */}
       <section id="faq" className="py-24 px-6 bg-card/30">
         <div className="mx-auto max-w-3xl">
-          <motion.div
-            initial="hidden" whileInView="show" viewport={{ once: true }} variants={fadeUp}
-            className="text-center mb-14"
-          >
+          <motion.div initial="hidden" whileInView="show" viewport={{ once: true }} variants={fadeUp} className="text-center mb-14">
             <p className="text-sm font-semibold uppercase tracking-widest text-emerald-600 dark:text-emerald-400 mb-3">FAQ</p>
             <h2 className="text-3xl sm:text-5xl font-bold text-foreground">Common questions</h2>
           </motion.div>
-
           <div className="space-y-3">
             {faqs.map((faq, i) => (
-              <motion.div
-                key={i}
-                initial="hidden" whileInView="show" viewport={{ once: true }} custom={i * 0.5} variants={fadeUp}
+              <motion.div key={i} initial="hidden" whileInView="show" viewport={{ once: true }} custom={i * 0.5} variants={fadeUp}
                 className="rounded-xl bg-card border border-border overflow-hidden"
               >
-                <button
-                  className="w-full flex items-center justify-between px-6 py-5 text-left"
-                  onClick={() => setOpenFaq(openFaq === i ? null : i)}
-                >
+                <button className="w-full flex items-center justify-between px-6 py-5 text-left" onClick={() => setOpenFaq(openFaq === i ? null : i)}>
                   <span className="font-semibold text-foreground pr-4">{faq.q}</span>
                   {openFaq === i
                     ? <ChevronUp className="h-5 w-5 text-emerald-500 shrink-0" />
@@ -501,7 +447,6 @@ export default function HomePage() {
                   <motion.div
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: 'auto' }}
-                    exit={{ opacity: 0, height: 0 }}
                     transition={{ duration: 0.2 }}
                     className="px-6 pb-5"
                   >
@@ -516,33 +461,24 @@ export default function HomePage() {
 
       {/* ── CTA ── */}
       <section className="py-24 px-6 mx-auto max-w-7xl">
-        <motion.div
-          initial="hidden" whileInView="show" viewport={{ once: true }} variants={fadeUp}
+        <motion.div initial="hidden" whileInView="show" viewport={{ once: true }} variants={fadeUp}
           className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-emerald-600 via-emerald-500 to-teal-500 p-10 sm:p-16 text-center"
         >
           <div className="absolute inset-0 opacity-10"
-            style={{
-              backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' xmlns='http://www.w3.org/2000/svg'%3E%3Cdefs%3E%3Cpattern id='g' width='60' height='60' patternUnits='userSpaceOnUse'%3E%3Cpath d='M 60 0 L 0 0 0 60' fill='none' stroke='white' stroke-width='1'/%3E%3C/pattern%3E%3C/defs%3E%3Crect width='100%25' height='100%25' fill='url(%23g)'/%3E%3C/svg%3E")`,
-            }}
+            style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' xmlns='http://www.w3.org/2000/svg'%3E%3Cdefs%3E%3Cpattern id='g' width='60' height='60' patternUnits='userSpaceOnUse'%3E%3Cpath d='M 60 0 L 0 0 0 60' fill='none' stroke='white' stroke-width='1'/%3E%3C/pattern%3E%3C/defs%3E%3Crect width='100%25' height='100%25' fill='url(%23g)'/%3E%3C/svg%3E")` }}
           />
           <div className="relative">
             <h2 className="text-3xl sm:text-5xl font-bold text-white leading-tight">
               Ready to grow your<br className="hidden sm:block" /> social media?
             </h2>
             <p className="mt-4 text-lg text-white/80 max-w-xl mx-auto">
-              Join 150,000+ customers who trust us to grow their online presence every day.
+              Join {statsLoading ? '150,000+' : `${formatCompact(totalCustomers)}`} customers who trust us to grow their online presence every day.
             </p>
             <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
-              <Link
-                to="/signup"
-                className="inline-flex items-center gap-2 rounded-full bg-white px-10 py-4 text-base font-bold text-emerald-600 shadow-xl hover:bg-gray-50 hover:-translate-y-0.5 transition-all duration-200"
-              >
+              <Link to="/signup" className="inline-flex items-center gap-2 rounded-full bg-white px-10 py-4 text-base font-bold text-emerald-600 shadow-xl hover:bg-gray-50 hover:-translate-y-0.5 transition-all duration-200">
                 Start Growing Now <ArrowRight className="h-4 w-4" />
               </Link>
-              <Link
-                to="/services"
-                className="inline-flex items-center gap-2 rounded-full bg-white/15 border border-white/30 px-10 py-4 text-base font-semibold text-white hover:bg-white/25 transition-all duration-200"
-              >
+              <Link to="/services" className="inline-flex items-center gap-2 rounded-full bg-white/15 border border-white/30 px-10 py-4 text-base font-semibold text-white hover:bg-white/25 transition-all duration-200">
                 View Services
               </Link>
             </div>
