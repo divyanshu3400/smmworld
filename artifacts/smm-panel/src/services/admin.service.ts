@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase'
+import { apiUrl } from '@/lib/api'
 
 async function getToken(): Promise<string> {
   const { data } = await supabase.auth.getSession()
@@ -9,7 +10,7 @@ async function getToken(): Promise<string> {
 
 async function adminFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const token = await getToken()
-  const res = await fetch(`/api/admin${path}`, {
+  const res = await fetch(apiUrl(`/api/admin${path}`), {
     ...options,
     headers: {
       'Content-Type': 'application/json',
@@ -73,7 +74,7 @@ export interface AdminUser {
 export async function checkAdminStatus(): Promise<boolean> {
   try {
     const token = await getToken()
-    const res = await fetch('/api/admin/check', {
+    const res = await fetch(apiUrl('/api/admin/check'), {
       headers: { Authorization: `Bearer ${token}` },
     })
     if (!res.ok) return false

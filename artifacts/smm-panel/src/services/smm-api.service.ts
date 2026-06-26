@@ -1,7 +1,9 @@
 // All WorldOfSMM API calls now go through our secure backend.
 // The API key is NEVER present in frontend code.
 
-const BASE = "/api/smm";
+import { apiUrl } from '@/lib/api'
+
+const BASE = apiUrl("/api/smm");
 
 async function apiFetch<T>(
   path: string,

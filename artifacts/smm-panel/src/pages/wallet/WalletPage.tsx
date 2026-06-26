@@ -15,6 +15,7 @@ import {
   IndianRupee,
 } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
+import { apiUrl } from '@/lib/api'
 import { getWallet, getTransactions } from '@/services/wallet.service'
 import { useCurrency } from '@/contexts/CurrencyContext'
 import { formatRelativeTime } from '@/lib/formatters'
@@ -92,7 +93,7 @@ async function getAuthToken(): Promise<string> {
 
 async function createRazorpayOrder(amountINR: number) {
   const token = await getAuthToken()
-  const res = await fetch('/api/payment/razorpay/create-order', {
+  const res = await fetch(apiUrl('/api/payment/razorpay/create-order'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify({ amountINR }),
@@ -111,7 +112,7 @@ async function verifyRazorpayPayment(
   amountINR: number
 ) {
   const token = await getAuthToken()
-  const res = await fetch('/api/payment/razorpay/verify', {
+  const res = await fetch(apiUrl('/api/payment/razorpay/verify'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify({ razorpay_order_id, razorpay_payment_id, razorpay_signature, amountINR }),

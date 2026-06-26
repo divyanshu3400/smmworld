@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { apiUrl } from '@/lib/api'
 
 export interface PublicStats {
   totalOrders: number
@@ -8,7 +9,7 @@ export interface PublicStats {
 }
 
 async function fetchPublicStats(): Promise<PublicStats> {
-  const res = await fetch('/api/public/stats')
+  const res = await fetch(apiUrl('/api/public/stats'))
   if (!res.ok) throw new Error('Failed to fetch stats')
   return res.json()
 }
