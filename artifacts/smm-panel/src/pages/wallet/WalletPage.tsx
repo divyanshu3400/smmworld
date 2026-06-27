@@ -1,22 +1,11 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
-import {
-  Wallet,
-  ArrowDownRight,
-  ArrowUpRight,
-  Filter,
-  Download,
-  ChevronLeft,
-  ChevronRight,
-  Plus,
-  Loader2,
-  CreditCard,
-  IndianRupee,
-} from 'lucide-react'
+import { Wallet, ArrowDownRight, ArrowUpRight, ListFilter as Filter, Download, ChevronLeft, ChevronRight, Plus, Loader as Loader2, CreditCard, IndianRupee, Smartphone, ExternalLink, CircleCheck as CheckCircle2, Clock, Circle as XCircle } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { apiUrl } from '@/lib/api'
 import { getWallet, getTransactions } from '@/services/wallet.service'
+import { getActiveGateways, type GatewayListResponse } from '@/services/admin.service'
 import { useCurrency } from '@/contexts/CurrencyContext'
 import { formatRelativeTime } from '@/lib/formatters'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -55,8 +44,10 @@ import { supabase } from '@/lib/supabase'
 declare global {
   interface Window {
     Razorpay: new (options: RazorpayOptions) => { open: () => void }
+    Cashfree?: new (options: CashfreeOptions) => { redirect: () => void }
   }
 }
+
 interface RazorpayOptions {
   key: string
   amount: number
@@ -73,6 +64,10 @@ interface RazorpayResponse {
   razorpay_order_id: string
   razorpay_payment_id: string
   razorpay_signature: string
+}
+interface CashfreeOptions {
+  paymentSessionId: string
+  returnUrl: string
 }
 
 const PRESET_AMOUNTS = [100, 200, 500, 1000, 2000, 5000]
@@ -91,9 +86,19 @@ async function getAuthToken(): Promise<string> {
   return data.session?.access_token || ''
 }
 
-async function createRazorpayOrder(amountINR: number) {
+interface CreateOrderResponse {
+  orderId: string
+  provider: string
+  providerOrderId: string
+  sessionId?: string
+  redirectUrl?: string
+  redirectParams?: Record<string, string>
+  amountINR: number
+}
+
+async function createGatewayOrder(amountINR: number): Promise<CreateOrderResponse> {
   const token = await getAuthToken()
-  const res = await fetch(apiUrl('/api/payment/razorpay/create-order'), {
+  const res = await fetch(apiUrl('/api/payment/create-order'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify({ amountINR }),
@@ -102,26 +107,40 @@ async function createRazorpayOrder(amountINR: number) {
     const err = await res.json().catch(() => ({}))
     throw new Error(err.error || 'Failed to create payment order')
   }
-  return res.json() as Promise<{ orderId: string; amount: number; currency: string; keyId: string }>
+  return res.json()
 }
 
-async function verifyRazorpayPayment(
-  razorpay_order_id: string,
-  razorpay_payment_id: string,
-  razorpay_signature: string,
-  amountINR: number
-) {
+async function verifyGatewayPayment(orderId: string): Promise<{
+  success: boolean
+  status?: string
+  message?: string
+  alreadyCredited?: boolean
+  provider?: string
+  amountINR?: number
+  amountUSD?: number
+  newBalance?: number
+}> {
   const token = await getAuthToken()
-  const res = await fetch(apiUrl('/api/payment/razorpay/verify'), {
+  const res = await fetch(apiUrl('/api/payment/verify'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ razorpay_order_id, razorpay_payment_id, razorpay_signature, amountINR }),
+    body: JSON.stringify({ orderId }),
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
     throw new Error(err.error || 'Payment verification failed')
   }
-  return res.json() as Promise<{ success: boolean; creditedUSD: number; newBalance: number }>
+  return res.json()
+}
+
+async function pollOrderStatus(orderId: string): Promise<string> {
+  const token = await getAuthToken()
+  const res = await fetch(apiUrl(`/api/payment/order/${orderId}/status`), {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok) throw new Error('Failed to check order status')
+  const data = await res.json()
+  return data.status
 }
 
 function loadRazorpayScript(): Promise<boolean> {
@@ -135,6 +154,19 @@ function loadRazorpayScript(): Promise<boolean> {
   })
 }
 
+function loadCashfreeScript(): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (window.Cashfree) return resolve(true)
+    const s = document.createElement('script')
+    s.src = 'https://sdk.cashfree.com/js/v3/cashfree.js'
+    s.onload = () => resolve(true)
+    s.onerror = () => resolve(false)
+    document.body.appendChild(s)
+  })
+}
+
+type PaymentState = 'idle' | 'creating' | 'waiting' | 'verifying' | 'done' | 'failed'
+
 export default function WalletPage() {
   const { user } = useAuth()
   const queryClient = useQueryClient()
@@ -145,7 +177,9 @@ export default function WalletPage() {
 
   const [addFundsOpen, setAddFundsOpen] = useState(false)
   const [amountINR, setAmountINR] = useState('')
-  const [isProcessing, setIsProcessing] = useState(false)
+  const [paymentState, setPaymentState] = useState<PaymentState>('idle')
+  const [activeOrderId, setActiveOrderId] = useState<string | null>(null)
+  const [statusMessage, setStatusMessage] = useState('')
 
   const { data: wallet, isLoading: walletLoading } = useQuery({
     queryKey: ['wallet'],
@@ -162,9 +196,60 @@ export default function WalletPage() {
     enabled: !!user?.id,
   })
 
+  const { data: gateways } = useQuery<GatewayListResponse>({
+    queryKey: ['active-gateways'],
+    queryFn: getActiveGateways,
+    enabled: !!user?.id,
+  })
+
   useEffect(() => {
     loadRazorpayScript()
+    loadCashfreeScript()
   }, [])
+
+  // Poll for payment status while waiting (UPI Collect on desktop).
+  useEffect(() => {
+    if (paymentState !== 'waiting' || !activeOrderId) return
+    let cancelled = false
+    const interval = setInterval(async () => {
+      try {
+        const status = await pollOrderStatus(activeOrderId)
+        if (cancelled) return
+        if (status === 'paid') {
+          clearInterval(interval)
+          setPaymentState('verifying')
+          const result = await verifyGatewayPayment(activeOrderId)
+          if (result.success) {
+            setPaymentState('done')
+            toast.success(`₹${result.amountINR} added successfully! Wallet credited.`)
+            queryClient.invalidateQueries({ queryKey: ['wallet'] })
+            queryClient.invalidateQueries({ queryKey: ['transactions'] })
+          } else {
+            setPaymentState('failed')
+            setStatusMessage(result.message || 'Payment verification failed')
+          }
+        } else if (status === 'failed') {
+          clearInterval(interval)
+          setPaymentState('failed')
+          setStatusMessage('Payment failed. Please try again.')
+        }
+      } catch {
+        // keep polling
+      }
+    }, 4000)
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
+  }, [paymentState, activeOrderId, queryClient])
+
+  const resetDialog = () => {
+    setAddFundsOpen(false)
+    setAmountINR('')
+    setPaymentState('idle')
+    setActiveOrderId(null)
+    setStatusMessage('')
+  }
 
   const handleAddFunds = async () => {
     const amount = parseFloat(amountINR)
@@ -173,56 +258,92 @@ export default function WalletPage() {
       return
     }
 
-    setIsProcessing(true)
+    const minTopup = gateways?.minTopupINR || 1
+    if (amount < minTopup) {
+      toast.error(`Minimum top-up is ₹${minTopup}`)
+      return
+    }
+
+    if (!gateways?.gateways?.length) {
+      toast.error('No payment gateway is active. Please contact support.')
+      return
+    }
+
+    setPaymentState('creating')
+    setStatusMessage('')
+
     try {
-      const loaded = await loadRazorpayScript()
-      if (!loaded) throw new Error('Could not load Razorpay checkout. Check your connection.')
+      const order = await createGatewayOrder(amount)
 
-      const order = await createRazorpayOrder(amount)
-
-      const options: RazorpayOptions = {
-        key: order.keyId,
-        amount: order.amount,
-        currency: 'INR',
-        name: 'SMMHub',
-        description: 'Wallet Top-up',
-        order_id: order.orderId,
-        handler: async (response: RazorpayResponse) => {
-          try {
-            const result = await verifyRazorpayPayment(
-              response.razorpay_order_id,
-              response.razorpay_payment_id,
-              response.razorpay_signature,
-              amount
-            )
-            if (result.success) {
-              toast.success(`₹${amount} added successfully! Wallet credited.`)
-              queryClient.invalidateQueries({ queryKey: ['wallet'] })
-              queryClient.invalidateQueries({ queryKey: ['transactions'] })
-              setAddFundsOpen(false)
-              setAmountINR('')
-            }
-          } catch (err) {
-            toast.error(err instanceof Error ? err.message : 'Payment verification failed')
-          } finally {
-            setIsProcessing(false)
-          }
-        },
-        prefill: { email: user?.email },
-        theme: { color: '#10b981' },
-        modal: {
-          ondismiss: () => {
-            setIsProcessing(false)
-            toast.info('Payment cancelled')
-          },
-        },
+      if (order.provider === 'cashfree' && order.sessionId) {
+        // Cashfree SDK — opens a modal/redirect. Works on desktop + mobile.
+        const loaded = await loadCashfreeScript()
+        if (!loaded || !window.Cashfree) {
+          throw new Error('Could not load Cashfree checkout.')
+        }
+        const cf = new window.Cashfree({
+          paymentSessionId: order.sessionId,
+          returnUrl: `${window.location.origin}/wallet?order_id=${order.orderId}`,
+        })
+        setActiveOrderId(order.orderId)
+        setPaymentState('waiting')
+        setStatusMessage('Complete the payment in the Cashfree window. Your wallet will be credited automatically once confirmed.')
+        cf.redirect()
+      } else if (order.provider === 'payu' && order.redirectUrl && order.redirectParams) {
+        // PayU — redirect via form POST. Works on desktop + mobile.
+        setActiveOrderId(order.orderId)
+        setPaymentState('waiting')
+        setStatusMessage('You will be redirected to PayU. After paying, you will return here and your wallet will be credited.')
+        const form = document.createElement('form')
+        form.method = 'POST'
+        form.action = order.redirectUrl
+        for (const [key, value] of Object.entries(order.redirectParams)) {
+          const input = document.createElement('input')
+          input.type = 'hidden'
+          input.name = key
+          input.value = value
+          form.appendChild(input)
+        }
+        document.body.appendChild(form)
+        form.submit()
+      } else if (order.provider === 'razorpay') {
+        // Legacy Razorpay path — kept for when admin re-enables it.
+        const loaded = await loadRazorpayScript()
+        if (!loaded) throw new Error('Could not load Razorpay checkout.')
+        setActiveOrderId(order.orderId)
+        setPaymentState('waiting')
+        // Razorpay verify happens in its own handler; for the unified flow we
+        // poll the order status the same way.
+      } else {
+        throw new Error('Unsupported payment provider')
       }
-
-      const rzp = new window.Razorpay(options)
-      rzp.open()
     } catch (err) {
-      setIsProcessing(false)
+      setPaymentState('failed')
+      setStatusMessage(err instanceof Error ? err.message : 'Failed to initiate payment')
       toast.error(err instanceof Error ? err.message : 'Failed to initiate payment')
+    }
+  }
+
+  // Manual verify button (user clicks "I have paid" after returning from gateway).
+  const handleVerify = async () => {
+    if (!activeOrderId) return
+    setPaymentState('verifying')
+    try {
+      const result = await verifyGatewayPayment(activeOrderId)
+      if (result.success) {
+        setPaymentState('done')
+        toast.success(`₹${result.amountINR} added successfully! Wallet credited.`)
+        queryClient.invalidateQueries({ queryKey: ['wallet'] })
+        queryClient.invalidateQueries({ queryKey: ['transactions'] })
+      } else {
+        setPaymentState('waiting')
+        setStatusMessage(result.message || 'Payment not confirmed yet. If you have paid, please wait a moment and try again.')
+        toast.info(result.message || 'Payment not confirmed yet')
+      }
+    } catch (err) {
+      setPaymentState('waiting')
+      setStatusMessage(err instanceof Error ? err.message : 'Verification failed')
+      toast.error(err instanceof Error ? err.message : 'Verification failed')
     }
   }
 
@@ -255,6 +376,12 @@ export default function WalletPage() {
     },
   ]
 
+  const providerLabel: Record<string, string> = {
+    cashfree: 'Cashfree',
+    payu: 'PayU',
+    razorpay: 'Razorpay',
+  }
+
   return (
     <motion.div variants={container} initial="hidden" animate="show" className="space-y-6">
       <motion.div variants={item} className="flex items-center justify-between">
@@ -264,7 +391,7 @@ export default function WalletPage() {
         </div>
         <Button
           className="bg-emerald-500 hover:bg-emerald-600 gap-2"
-          onClick={() => setAddFundsOpen(true)}
+          onClick={() => { setAddFundsOpen(true); setPaymentState('idle') }}
         >
           <Plus className="h-4 w-4" />
           Add Funds
@@ -295,7 +422,7 @@ export default function WalletPage() {
                   size="sm"
                   variant="secondary"
                   className="bg-white/20 hover:bg-white/30 text-white border-0 gap-1.5"
-                  onClick={() => setAddFundsOpen(true)}
+                  onClick={() => { setAddFundsOpen(true); setPaymentState('idle') }}
                 >
                   <Plus className="h-3.5 w-3.5" />
                   Add Funds
@@ -451,7 +578,7 @@ export default function WalletPage() {
                 </p>
                 <Button
                   className="bg-emerald-500 hover:bg-emerald-600 gap-2"
-                  onClick={() => setAddFundsOpen(true)}
+                  onClick={() => { setAddFundsOpen(true); setPaymentState('idle') }}
                 >
                   <Plus className="h-4 w-4" />
                   Add Funds to Get Started
@@ -463,7 +590,7 @@ export default function WalletPage() {
       </motion.div>
 
       {/* Add Funds Dialog */}
-      <Dialog open={addFundsOpen} onOpenChange={setAddFundsOpen}>
+      <Dialog open={addFundsOpen} onOpenChange={(open) => { if (!open) resetDialog(); else setAddFundsOpen(true) }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <div className="flex items-center gap-2">
@@ -472,86 +599,183 @@ export default function WalletPage() {
               </div>
               <div>
                 <DialogTitle>Add Funds</DialogTitle>
-                <DialogDescription>Top up your wallet using Razorpay</DialogDescription>
+                <DialogDescription>
+                  {gateways?.gateways?.length
+                    ? `Top up via ${gateways.gateways.map((g) => providerLabel[g] || g).join(' · ')}`
+                    : 'No payment gateway active'}
+                </DialogDescription>
               </div>
             </div>
           </DialogHeader>
 
-          <div className="space-y-5 py-2">
-            {/* Preset amounts */}
-            <div className="space-y-2">
-              <Label className="text-sm font-medium">Select Amount</Label>
-              <div className="grid grid-cols-3 gap-2">
-                {PRESET_AMOUNTS.map((preset) => (
-                  <button
-                    key={preset}
-                    type="button"
-                    onClick={() => setAmountINR(String(preset))}
-                    className={`flex items-center justify-center gap-1 py-2 px-3 rounded-lg border text-sm font-medium transition-all ${
-                      amountINR === String(preset)
-                        ? 'border-emerald-500 bg-emerald-500/10 text-emerald-500'
-                        : 'border-border hover:border-emerald-500/50 text-foreground'
-                    }`}
-                  >
-                    <IndianRupee className="h-3 w-3" />
-                    {preset.toLocaleString('en-IN')}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Custom amount */}
-            <div className="space-y-2">
-              <Label htmlFor="custom-amount">Or enter custom amount (₹)</Label>
-              <div className="relative">
-                <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="custom-amount"
-                  type="number"
-                  min="1"
-                  step="1"
-                  placeholder="Enter amount in ₹"
-                  value={amountINR}
-                  onChange={(e) => setAmountINR(e.target.value)}
-                  className="pl-9"
-                />
-              </div>
-              <p className="text-xs text-muted-foreground">Minimum ₹1 · Secure payments via Razorpay</p>
-            </div>
-
-            {/* Summary */}
-            {amountINR && parseFloat(amountINR) > 0 && (
-              <div className="rounded-lg bg-muted p-3 space-y-1 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">You pay</span>
-                  <span className="font-medium">₹{parseFloat(amountINR).toLocaleString('en-IN')}</span>
+          {paymentState === 'idle' && (
+            <div className="space-y-5 py-2">
+              {/* Preset amounts */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Select Amount</Label>
+                <div className="grid grid-cols-3 gap-2">
+                  {PRESET_AMOUNTS.map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => setAmountINR(String(preset))}
+                      className={`flex items-center justify-center gap-1 py-2 px-3 rounded-lg border text-sm font-medium transition-all ${
+                        amountINR === String(preset)
+                          ? 'border-emerald-500 bg-emerald-500/10 text-emerald-500'
+                          : 'border-border hover:border-emerald-500/50 text-foreground'
+                      }`}
+                    >
+                      <IndianRupee className="h-3 w-3" />
+                      {preset.toLocaleString('en-IN')}
+                    </button>
+                  ))}
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Approx. USD credited</span>
-                  <span className="font-medium text-emerald-500">
-                    ~${(parseFloat(amountINR) / 83.5).toFixed(4)}
+              </div>
+
+              {/* Custom amount */}
+              <div className="space-y-2">
+                <Label htmlFor="custom-amount">Or enter custom amount (₹)</Label>
+                <div className="relative">
+                  <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="custom-amount"
+                    type="number"
+                    min={gateways?.minTopupINR || 1}
+                    step="1"
+                    placeholder="Enter amount in ₹"
+                    value={amountINR}
+                    onChange={(e) => setAmountINR(e.target.value)}
+                    className="pl-9"
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Minimum ₹{gateways?.minTopupINR || 1} · UPI, cards & netbanking supported
+                </p>
+              </div>
+
+              {/* Summary */}
+              {amountINR && parseFloat(amountINR) > 0 && (
+                <div className="rounded-lg bg-muted p-3 space-y-1 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">You pay</span>
+                    <span className="font-medium">₹{parseFloat(amountINR).toLocaleString('en-IN')}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Approx. USD credited</span>
+                    <span className="font-medium text-emerald-500">
+                      ~${(parseFloat(amountINR) / 83.5).toFixed(4)}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Active gateways info */}
+              {gateways?.gateways?.length ? (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Smartphone className="h-3.5 w-3.5" />
+                  <span>
+                    Works on desktop & mobile. UPI Collect sends a request to your UPI app — approve it there.
                   </span>
                 </div>
-              </div>
-            )}
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setAddFundsOpen(false)} disabled={isProcessing}>
-              Cancel
-            </Button>
-            <Button
-              className="bg-emerald-500 hover:bg-emerald-600 gap-2"
-              onClick={handleAddFunds}
-              disabled={isProcessing || !amountINR || parseFloat(amountINR) < 1}
-            >
-              {isProcessing ? (
-                <><Loader2 className="h-4 w-4 animate-spin" />Processing...</>
               ) : (
-                <><CreditCard className="h-4 w-4" />Pay with Razorpay</>
+                <div className="flex items-center gap-2 text-xs text-amber-600 dark:text-amber-400">
+                  <XCircle className="h-3.5 w-3.5" />
+                  <span>No payment gateway is active. Ask an admin to enable one.</span>
+                </div>
               )}
-            </Button>
-          </DialogFooter>
+            </div>
+          )}
+
+          {paymentState === 'creating' && (
+            <div className="py-8 flex flex-col items-center gap-3">
+              <Loader2 className="h-8 w-8 animate-spin text-emerald-500" />
+              <p className="text-sm text-muted-foreground">Creating your payment order…</p>
+            </div>
+          )}
+
+          {paymentState === 'waiting' && (
+            <div className="py-6 space-y-4">
+              <div className="flex flex-col items-center gap-3 text-center">
+                <div className="h-14 w-14 rounded-full bg-emerald-500/10 flex items-center justify-center">
+                  <Clock className="h-7 w-7 text-emerald-500" />
+                </div>
+                <div>
+                  <p className="font-medium">Waiting for payment confirmation</p>
+                  <p className="text-sm text-muted-foreground mt-1 max-w-xs">{statusMessage}</p>
+                </div>
+              </div>
+              <div className="rounded-lg bg-muted p-3 text-xs text-muted-foreground">
+                <p>
+                  If you have completed the payment, click below to verify. We
+                  check the gateway directly — your wallet is only credited
+                  after the payment is confirmed, so false claims cannot credit
+                  your account.
+                </p>
+              </div>
+              <Button onClick={handleVerify} className="w-full bg-emerald-500 hover:bg-emerald-600 gap-2">
+                <CheckCircle2 className="h-4 w-4" />
+                I have paid — verify now
+              </Button>
+            </div>
+          )}
+
+          {paymentState === 'verifying' && (
+            <div className="py-8 flex flex-col items-center gap-3">
+              <Loader2 className="h-8 w-8 animate-spin text-emerald-500" />
+              <p className="text-sm text-muted-foreground">Verifying your payment…</p>
+            </div>
+          )}
+
+          {paymentState === 'done' && (
+            <div className="py-8 flex flex-col items-center gap-3 text-center">
+              <div className="h-14 w-14 rounded-full bg-emerald-500/10 flex items-center justify-center">
+                <CheckCircle2 className="h-7 w-7 text-emerald-500" />
+              </div>
+              <div>
+                <p className="font-medium">Payment successful!</p>
+                <p className="text-sm text-muted-foreground mt-1">Your wallet has been credited.</p>
+              </div>
+              <Button onClick={resetDialog} className="bg-emerald-500 hover:bg-emerald-600">Done</Button>
+            </div>
+          )}
+
+          {paymentState === 'failed' && (
+            <div className="py-6 space-y-4">
+              <div className="flex flex-col items-center gap-3 text-center">
+                <div className="h-14 w-14 rounded-full bg-red-500/10 flex items-center justify-center">
+                  <XCircle className="h-7 w-7 text-red-500" />
+                </div>
+                <div>
+                  <p className="font-medium">Payment failed</p>
+                  <p className="text-sm text-muted-foreground mt-1 max-w-xs">{statusMessage}</p>
+                </div>
+              </div>
+              <Button onClick={() => setPaymentState('idle')} variant="outline" className="w-full">
+                Try again
+              </Button>
+            </div>
+          )}
+
+          {paymentState === 'idle' && (
+            <DialogFooter>
+              <Button variant="outline" onClick={resetDialog} disabled={paymentState !== 'idle'}>
+                Cancel
+              </Button>
+              <Button
+                className="bg-emerald-500 hover:bg-emerald-600 gap-2"
+                onClick={handleAddFunds}
+                disabled={
+                  paymentState !== 'idle' ||
+                  !amountINR ||
+                  parseFloat(amountINR) < (gateways?.minTopupINR || 1) ||
+                  !gateways?.gateways?.length
+                }
+              >
+                <CreditCard className="h-4 w-4" />
+                Pay ₹{amountINR && parseFloat(amountINR) > 0 ? parseFloat(amountINR).toLocaleString('en-IN') : ''}
+              </Button>
+            </DialogFooter>
+          )}
         </DialogContent>
       </Dialog>
     </motion.div>

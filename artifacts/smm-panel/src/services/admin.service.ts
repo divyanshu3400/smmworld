@@ -138,3 +138,62 @@ export async function adjustUserWallet(
     body: JSON.stringify({ amount, type, description }),
   })
 }
+
+// ── Payment gateway settings ─────────────────────────────────────────────────
+
+export interface PaymentSettingsResponse {
+  id: number
+  razorpay_enabled: boolean
+  cashfree_enabled: boolean
+  payu_enabled: boolean
+  gateway_priority: string[]
+  min_topup_inr: number
+  updated_at: string | null
+  updated_by: string | null
+  configured: {
+    razorpay: boolean
+    cashfree: boolean
+    payu: boolean
+  }
+}
+
+export async function getPaymentSettings(): Promise<PaymentSettingsResponse> {
+  return adminFetch<PaymentSettingsResponse>('/payment-settings')
+}
+
+export async function updatePaymentSettings(
+  updates: Partial<{
+    razorpay_enabled: boolean
+    cashfree_enabled: boolean
+    payu_enabled: boolean
+    gateway_priority: string[]
+    min_topup_inr: number
+  }>
+): Promise<{ success: boolean }> {
+  return adminFetch('/payment-settings', {
+    method: 'PUT',
+    body: JSON.stringify(updates),
+  })
+}
+
+// ── Public gateway list (for wallet page) ────────────────────────────────────
+
+export interface GatewayListResponse {
+  gateways: string[]
+  minTopupINR: number
+  configured: {
+    razorpay: boolean
+    cashfree: boolean
+    payu: boolean
+  }
+}
+
+export async function getActiveGateways(): Promise<GatewayListResponse> {
+  const token = await getToken()
+  const res = await fetch(apiUrl('/api/payment/gateways'), {
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+  })
+  const data = await res.json()
+  if (!res.ok) throw new Error(data?.error || `Request failed: ${res.status}`)
+  return data as GatewayListResponse
+}

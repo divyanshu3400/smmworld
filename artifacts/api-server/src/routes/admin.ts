@@ -10,6 +10,7 @@ import {
   fetchOrderStatus,
   cancelProviderOrder,
 } from "../services/smmService";
+import { isProviderConfigured } from "../services/paymentGateway";
 
 const router = Router();
 
@@ -460,6 +461,107 @@ router.post("/users/:id/wallet/adjust", requireAdmin, async (req, res) => {
 
   logger.info({ userId: id, type, amount, adminId: req.userId }, "Admin wallet adjustment");
   res.json({ success: true, newBalance });
+});
+
+// ── GET /api/admin/payment-settings ───────────────────────────────────────────
+router.get("/payment-settings", requireAdmin, async (req, res) => {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("payment_settings")
+      .select("*")
+      .eq("id", 1)
+      .maybeSingle();
+
+    if (error) throw error;
+
+    const settings = data || {
+      id: 1,
+      razorpay_enabled: false,
+      cashfree_enabled: false,
+      payu_enabled: false,
+      gateway_priority: ["cashfree", "payu", "razorpay"],
+      min_topup_inr: 1,
+      updated_at: null,
+      updated_by: null,
+    };
+
+    // Include which providers have credentials configured (so the admin UI
+    // can warn "enabled but keys missing"). Keys themselves are never sent.
+    res.json({
+      ...settings,
+      configured: {
+        razorpay: isProviderConfigured("razorpay"),
+        cashfree: isProviderConfigured("cashfree"),
+        payu: isProviderConfigured("payu"),
+      },
+    });
+  } catch (err) {
+    logger.error({ err }, "Failed to fetch payment settings");
+    res.status(500).json({ error: "Failed to load payment settings" });
+  }
+});
+
+// ── PUT /api/admin/payment-settings ───────────────────────────────────────────
+const PaymentSettingsSchema = z.object({
+  razorpay_enabled: z.boolean().optional(),
+  cashfree_enabled: z.boolean().optional(),
+  payu_enabled: z.boolean().optional(),
+  gateway_priority: z.array(z.enum(["razorpay", "cashfree", "payu"])).optional(),
+  min_topup_inr: z.number().positive().max(100000).optional(),
+});
+
+router.put("/payment-settings", requireAdmin, async (req, res) => {
+  const parsed = PaymentSettingsSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: "Invalid settings", details: parsed.error.flatten() });
+  }
+
+  const updates = { ...parsed.data, updated_at: new Date().toISOString(), updated_by: req.userId };
+
+  try {
+    const { error } = await supabaseAdmin
+      .from("payment_settings")
+      .update(updates)
+      .eq("id", 1);
+
+    if (error) {
+      logger.error({ error }, "Failed to update payment settings");
+      return res.status(500).json({ error: "Failed to save settings" });
+    }
+
+    logger.info({ updates, adminId: req.userId }, "Payment settings updated");
+    return res.json({ success: true });
+  } catch (err) {
+    logger.error({ err }, "Payment settings update error");
+    return res.status(500).json({ error: "Failed to save settings" });
+  }
+});
+
+// ── GET /api/admin/payment-orders ─────────────────────────────────────────────
+// Lists recent payment orders for reconciliation / audit.
+router.get("/payment-orders", requireAdmin, async (req, res) => {
+  const page = Math.max(1, parseInt(String(req.query.page || "1")));
+  const limit = Math.min(100, parseInt(String(req.query.limit || "20")));
+  const status = String(req.query.status || "");
+  const from = (page - 1) * limit;
+  const to = from + limit - 1;
+
+  let query = supabaseAdmin
+    .from("payment_orders")
+    .select("*", { count: "exact" })
+    .order("created_at", { ascending: false });
+
+  if (status && status !== "all") {
+    query = query.eq("status", status);
+  }
+
+  const { data: orders, error, count } = await query.range(from, to);
+
+  if (error) {
+    return res.status(500).json({ error: "Failed to fetch payment orders" });
+  }
+
+  return res.json({ orders: orders || [], total: count || 0, page, limit });
 });
 
 export default router;

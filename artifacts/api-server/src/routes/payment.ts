@@ -4,8 +4,112 @@ import crypto from "crypto";
 import { requireAuth } from "../lib/auth";
 import { supabaseAdmin } from "../lib/supabaseAdmin";
 import { logger } from "../lib/logger";
+import {
+  createOrder as gatewayCreateOrder,
+  fetchPaymentStatus,
+  resolveActiveProviders,
+  isProviderConfigured,
+  type ProviderKey,
+  type PaymentSettings,
+} from "../services/paymentGateway";
 
 const router = Router();
+
+// ── Helpers for the multi-gateway flow ──────────────────────────────────────
+
+async function getPaymentSettings(): Promise<PaymentSettings> {
+  const { data } = await supabaseAdmin
+    .from("payment_settings")
+    .select("razorpay_enabled, cashfree_enabled, payu_enabled, gateway_priority, min_topup_inr")
+    .eq("id", 1)
+    .maybeSingle();
+
+  if (!data) {
+    return {
+      razorpay_enabled: false,
+      cashfree_enabled: false,
+      payu_enabled: false,
+      gateway_priority: ["cashfree", "payu", "razorpay"],
+      min_topup_inr: 1,
+    };
+  }
+  return data as PaymentSettings;
+}
+
+async function getINRtoUSDRate(): Promise<number> {
+  const { data } = await supabaseAdmin
+    .from("exchange_rates")
+    .select("rate")
+    .eq("target_currency", "INR")
+    .maybeSingle();
+  return data?.rate || 83.5;
+}
+
+/**
+ * Credits the wallet for a verified payment. Uses the same insert-first
+ * idempotency pattern as the Razorpay verify route: the unique constraint
+ * on wallet_transactions.reference_id prevents double-credit.
+ */
+async function creditWallet(
+  userId: string,
+  amountUSD: number,
+  amountINR: number,
+  provider: ProviderKey,
+  providerPaymentId: string
+): Promise<{ newBalance: number; duplicate: boolean }> {
+  const { data: wallet, error: walletErr } = await supabaseAdmin
+    .from("wallets")
+    .select("id, balance")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (walletErr || !wallet) throw new Error("Wallet not found");
+
+  const newBalance = wallet.balance + amountUSD;
+  const referenceId = `${provider}_${providerPaymentId}`;
+
+  const { error: txErr } = await supabaseAdmin.from("wallet_transactions").insert({
+    wallet_id: wallet.id,
+    user_id: userId,
+    type: "credit",
+    amount: amountUSD,
+    description: `Wallet top-up via ${provider} (₹${amountINR.toFixed(2)})`,
+    reference_id: referenceId,
+    balance_after: newBalance,
+  });
+
+  if (txErr) {
+    if (txErr.code === "23505") {
+      // Duplicate — already credited. Return existing balance.
+      const { data: existing } = await supabaseAdmin
+        .from("wallet_transactions")
+        .select("amount, balance_after")
+        .eq("reference_id", referenceId)
+        .eq("user_id", userId)
+        .eq("type", "credit")
+        .maybeSingle();
+      return {
+        newBalance: existing?.balance_after ?? wallet.balance,
+        duplicate: true,
+      };
+    }
+    throw txErr;
+  }
+
+  const { error: updateErr } = await supabaseAdmin
+    .from("wallets")
+    .update({ balance: newBalance, updated_at: new Date().toISOString() })
+    .eq("id", wallet.id);
+
+  if (updateErr) {
+    logger.error(
+      { userId, referenceId, amountUSD, updateErr },
+      "CRITICAL: tx inserted but wallet update failed — manual reconciliation needed"
+    );
+  }
+
+  return { newBalance, duplicate: false };
+}
 
 function getRazorpay() {
   const key_id = process.env.RAZORPAY_KEY_ID;
@@ -200,6 +304,278 @@ router.post("/razorpay/verify", requireAuth, async (req, res) => {
     logger.error({ err, userId, razorpay_payment_id }, "Razorpay verify error");
     return res.status(500).json({ error: "Payment verification failed" });
   }
+});
+
+// ── GET /api/payment/gateways ────────────────────────────────────────────────
+// Public (auth required) — returns which gateways are active so the wallet
+// UI can render the method picker. Does NOT expose keys.
+router.get("/gateways", requireAuth, async (req, res) => {
+  try {
+    const settings = await getPaymentSettings();
+    const active = resolveActiveProviders(settings);
+    return res.json({
+      gateways: active,
+      minTopupINR: Number(settings.min_topup_inr),
+      // Tell the frontend which providers are configured (keys present) even
+      // if not enabled, so the admin UI can show "configured but off".
+      configured: {
+        razorpay: isProviderConfigured("razorpay"),
+        cashfree: isProviderConfigured("cashfree"),
+        payu: isProviderConfigured("payu"),
+      },
+    });
+  } catch (err) {
+    logger.error({ err }, "Failed to fetch gateway settings");
+    return res.status(500).json({ error: "Failed to load payment methods" });
+  }
+});
+
+// ── POST /api/payment/create-order ──────────────────────────────────────────
+// Creates a payment order with the primary active gateway. If that gateway
+// fails (down / misconfigured), falls back to the next enabled gateway.
+// Returns the provider + everything the frontend needs to launch the payment.
+router.post("/create-order", requireAuth, async (req, res) => {
+  const userId = req.userId!;
+  const amountINR = Number(req.body?.amountINR);
+
+  if (!amountINR || amountINR < 1) {
+    return res.status(400).json({ error: "Invalid amount" });
+  }
+
+  try {
+    const settings = await getPaymentSettings();
+    if (amountINR < Number(settings.min_topup_inr)) {
+      return res.status(400).json({
+        error: `Minimum top-up is ₹${settings.min_topup_inr}`,
+      });
+    }
+
+    const active = resolveActiveProviders(settings);
+    if (active.length === 0) {
+      return res.status(503).json({ error: "No payment gateway is currently active" });
+    }
+
+    // Fetch user email for the gateway's customer details.
+    const { data: { user } } = await supabaseAdmin.auth.admin.getUserById(userId);
+    const customerEmail = user?.email || "customer@example.com";
+
+    // Try each active provider in priority order until one succeeds.
+    let lastError: string | undefined;
+    for (const provider of active) {
+      const orderId = crypto.randomUUID();
+
+      // Insert a pending payment_orders row.
+      const { error: insertErr } = await supabaseAdmin.from("payment_orders").insert({
+        id: orderId,
+        user_id: userId,
+        provider,
+        amount_inr: amountINR,
+        status: "pending",
+        expires_at: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+      });
+
+      if (insertErr) {
+        logger.error({ insertErr, userId, provider }, "Failed to insert payment_orders");
+        lastError = "Failed to create order record";
+        continue;
+      }
+
+      try {
+        const result = await gatewayCreateOrder(provider, {
+          amountINR,
+          customerId: userId,
+          customerEmail,
+          orderId,
+        });
+
+        // Store the provider order id.
+        await supabaseAdmin
+          .from("payment_orders")
+          .update({ provider_order_id: result.providerOrderId })
+          .eq("id", orderId);
+
+        return res.json({
+          orderId,
+          provider: result.provider,
+          providerOrderId: result.providerOrderId,
+          sessionId: result.sessionId,
+          redirectUrl: result.redirectUrl,
+          redirectParams: result.redirectParams,
+          amountINR,
+        });
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : "Gateway error";
+        logger.warn({ provider, msg, userId }, "Provider create-order failed, trying fallback");
+        lastError = msg;
+
+        // Mark this attempt failed and continue to the next provider.
+        await supabaseAdmin
+          .from("payment_orders")
+          .update({ status: "failed", failure_reason: msg })
+          .eq("id", orderId);
+      }
+    }
+
+    return res.status(502).json({
+      error: "All payment gateways failed. Please try again later.",
+      detail: lastError,
+    });
+  } catch (err) {
+    logger.error({ err, userId }, "create-order error");
+    return res.status(500).json({ error: "Failed to create payment order" });
+  }
+});
+
+// ── POST /api/payment/verify ─────────────────────────────────────────────────
+// Verifies a payment by polling the gateway's status API. Called by the
+// frontend after the user completes the payment (Cashfree SDK callback or
+// PayU redirect back). Credits the wallet if status is paid.
+router.post("/verify", requireAuth, async (req, res) => {
+  const userId = req.userId!;
+  const { orderId } = req.body as { orderId?: string };
+
+  if (!orderId) {
+    return res.status(400).json({ error: "Missing orderId" });
+  }
+
+  try {
+    const { data: order, error } = await supabaseAdmin
+      .from("payment_orders")
+      .select("*")
+      .eq("id", orderId)
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (error || !order) {
+      return res.status(404).json({ error: "Order not found" });
+    }
+
+    if (order.status === "paid") {
+      return res.json({
+        success: true,
+        alreadyCredited: true,
+        provider: order.provider,
+        amountINR: Number(order.amount_inr),
+        amountUSD: Number(order.amount_usd || 0),
+      });
+    }
+
+    if (order.provider === "razorpay") {
+      // Razorpay has its own dedicated verify route with signature checking.
+      return res.status(400).json({
+        error: "Use the Razorpay-specific verify endpoint for Razorpay orders",
+      });
+    }
+
+    if (!order.provider_order_id) {
+      return res.status(400).json({ error: "Order has no provider order id" });
+    }
+
+    const status = await fetchPaymentStatus(
+      order.provider as ProviderKey,
+      order.provider_order_id
+    );
+
+    if (status.status !== "paid") {
+      return res.json({
+        success: false,
+        status: status.status,
+        message: status.status === "pending"
+          ? "Payment is still being processed. If you have paid, please wait a moment and try again."
+          : "Payment was not completed or failed. Please try again.",
+      });
+    }
+
+    // Verify the amount matches what the user claimed — fraud guard.
+    if (status.amountINR && Math.abs(status.amountINR - Number(order.amount_inr)) > 0.01) {
+      logger.error(
+        {
+          orderId,
+          expected: order.amount_inr,
+          actual: status.amountINR,
+          userId,
+        },
+        "Amount mismatch — possible fraud attempt"
+      );
+      await supabaseAdmin
+        .from("payment_orders")
+        .update({
+          status: "failed",
+          failure_reason: `Amount mismatch: expected ₹${order.amount_inr}, got ₹${status.amountINR}`,
+        })
+        .eq("id", orderId);
+      return res.status(400).json({
+        error: "Payment amount does not match the order amount. Please contact support.",
+      });
+    }
+
+    const amountUSD = Number(order.amount_inr) / (await getINRtoUSDRate());
+    const roundedUSD = parseFloat(amountUSD.toFixed(4));
+
+    const { newBalance, duplicate } = await creditWallet(
+      userId,
+      roundedUSD,
+      Number(order.amount_inr),
+      order.provider as ProviderKey,
+      status.providerPaymentId || order.provider_order_id
+    );
+
+    // Mark the order paid.
+    await supabaseAdmin
+      .from("payment_orders")
+      .update({
+        status: "paid",
+        provider_payment_id: status.providerPaymentId,
+        amount_usd: roundedUSD,
+        paid_at: new Date().toISOString(),
+      })
+      .eq("id", orderId);
+
+    logger.info(
+      { userId, orderId, provider: order.provider, amountINR: order.amount_inr, roundedUSD, duplicate },
+      "Wallet credited via gateway"
+    );
+
+    return res.json({
+      success: true,
+      duplicate,
+      provider: order.provider,
+      amountINR: Number(order.amount_inr),
+      amountUSD: roundedUSD,
+      newBalance,
+    });
+  } catch (err) {
+    logger.error({ err, userId, orderId }, "verify error");
+    return res.status(500).json({ error: "Payment verification failed" });
+  }
+});
+
+// ── GET /api/payment/order/:id/status ───────────────────────────────────────
+// Lightweight poll for the frontend to check if a payment has been confirmed
+// (e.g. while waiting on a UPI Collect approval). Does NOT credit — that only
+// happens via /verify. Returns the current payment_orders.status.
+router.get("/order/:id/status", requireAuth, async (req, res) => {
+  const userId = req.userId!;
+  const { id } = req.params;
+
+  const { data: order, error } = await supabaseAdmin
+    .from("payment_orders")
+    .select("status, provider, amount_inr, amount_usd, provider_payment_id")
+    .eq("id", id)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (error || !order) {
+    return res.status(404).json({ error: "Order not found" });
+  }
+
+  return res.json({
+    status: order.status,
+    provider: order.provider,
+    amountINR: Number(order.amount_inr),
+    amountUSD: order.amount_usd ? Number(order.amount_usd) : null,
+    providerPaymentId: order.provider_payment_id,
+  });
 });
 
 export default router;
