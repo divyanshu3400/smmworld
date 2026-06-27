@@ -7,6 +7,7 @@ import { apiUrl } from '@/lib/api'
 import { getWallet, getTransactions } from '@/services/wallet.service'
 import { getActiveGateways, type GatewayListResponse } from '@/services/admin.service'
 import { useCurrency } from '@/contexts/CurrencyContext'
+import { getCurrencySymbol, type CurrencyCode } from '@/lib/currency'
 import { formatRelativeTime } from '@/lib/formatters'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -117,7 +118,7 @@ async function verifyGatewayPayment(orderId: string): Promise<{
   alreadyCredited?: boolean
   provider?: string
   amountINR?: number
-  amountUSD?: number
+  currency?: string
   newBalance?: number
 }> {
   const token = await getAuthToken()
@@ -171,6 +172,7 @@ export default function WalletPage() {
   const { user } = useAuth()
   const queryClient = useQueryClient()
   const { formatPrice, currency } = useCurrency()
+  const currencySymbol = getCurrencySymbol(currency as CurrencyCode)
   const [page, setPage] = useState(1)
   const [type, setType] = useState<string>('all')
   const pageSize = 10
@@ -222,7 +224,7 @@ export default function WalletPage() {
     verifyGatewayPayment(orderId).then((result) => {
       if (result.success) {
         setPaymentState('done')
-        toast.success(`₹${result.amountINR} added successfully! Wallet credited.`)
+        toast.success(`${currencySymbol}${result.amountINR} added successfully! Wallet credited.`)
         queryClient.invalidateQueries({ queryKey: ['wallet'] })
         queryClient.invalidateQueries({ queryKey: ['transactions'] })
       } else {
@@ -250,7 +252,7 @@ export default function WalletPage() {
           const result = await verifyGatewayPayment(activeOrderId)
           if (result.success) {
             setPaymentState('done')
-            toast.success(`₹${result.amountINR} added successfully! Wallet credited.`)
+            toast.success(`${currencySymbol}${result.amountINR} added successfully! Wallet credited.`)
             queryClient.invalidateQueries({ queryKey: ['wallet'] })
             queryClient.invalidateQueries({ queryKey: ['transactions'] })
           } else {
@@ -283,13 +285,13 @@ export default function WalletPage() {
   const handleAddFunds = async () => {
     const amount = parseFloat(amountINR)
     if (!amount || amount < 1) {
-      toast.error('Enter a valid amount (minimum ₹1)')
+      toast.error(`Enter a valid amount (minimum ${currencySymbol}1)`)
       return
     }
 
     const minTopup = gateways?.minTopupINR || 1
     if (amount < minTopup) {
-      toast.error(`Minimum top-up is ₹${minTopup}`)
+      toast.error(`Minimum top-up is ${currencySymbol}${minTopup}`)
       return
     }
 
@@ -364,7 +366,7 @@ export default function WalletPage() {
       const result = await verifyGatewayPayment(activeOrderId)
       if (result.success) {
         setPaymentState('done')
-        toast.success(`₹${result.amountINR} added successfully! Wallet credited.`)
+        toast.success(`${currencySymbol}${result.amountINR} added successfully! Wallet credited.`)
         queryClient.invalidateQueries({ queryKey: ['wallet'] })
         queryClient.invalidateQueries({ queryKey: ['transactions'] })
       } else {
@@ -663,7 +665,7 @@ export default function WalletPage() {
 
               {/* Custom amount */}
               <div className="space-y-2">
-                <Label htmlFor="custom-amount">Or enter custom amount (₹)</Label>
+                <Label htmlFor="custom-amount">Or enter custom amount ({currencySymbol})</Label>
                 <div className="relative">
                   <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
@@ -671,14 +673,14 @@ export default function WalletPage() {
                     type="number"
                     min={gateways?.minTopupINR || 1}
                     step="1"
-                    placeholder="Enter amount in ₹"
+                    placeholder={`Enter amount in ${currencySymbol}`}
                     value={amountINR}
                     onChange={(e) => setAmountINR(e.target.value)}
                     className="pl-9"
                   />
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Minimum ₹{gateways?.minTopupINR || 1} · UPI, cards & netbanking supported
+                  Minimum {currencySymbol}{gateways?.minTopupINR || 1} · UPI, cards & netbanking supported
                 </p>
               </div>
 
@@ -687,12 +689,12 @@ export default function WalletPage() {
                 <div className="rounded-lg bg-muted p-3 space-y-1 text-sm">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">You pay</span>
-                    <span className="font-medium">₹{parseFloat(amountINR).toLocaleString('en-IN')}</span>
+                    <span className="font-medium">{currencySymbol}{parseFloat(amountINR).toLocaleString('en-IN')}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Approx. USD credited</span>
+                    <span className="text-muted-foreground">Credited to wallet</span>
                     <span className="font-medium text-emerald-500">
-                      ~${(parseFloat(amountINR) / 83.5).toFixed(4)}
+                      {currencySymbol}{parseFloat(amountINR).toLocaleString('en-IN')}
                     </span>
                   </div>
                 </div>
@@ -801,7 +803,7 @@ export default function WalletPage() {
                 }
               >
                 <CreditCard className="h-4 w-4" />
-                Pay ₹{amountINR && parseFloat(amountINR) > 0 ? parseFloat(amountINR).toLocaleString('en-IN') : ''}
+                Pay {currencySymbol}{amountINR && parseFloat(amountINR) > 0 ? parseFloat(amountINR).toLocaleString('en-IN') : ''}
               </Button>
             </DialogFooter>
           )}

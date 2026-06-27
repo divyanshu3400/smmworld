@@ -1,11 +1,10 @@
 import { createContext, useContext, useEffect, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '@/hooks/useAuth'
-import { getSettings } from '@/services/settings.service'
+import { getWallet } from '@/services/wallet.service'
 import { getExchangeRates } from '@/services/exchange-rate.service'
 import { formatCurrencyByCode, type CurrencyCode } from '@/lib/currency'
 
-const LS_CURRENCY_KEY = 'smmhub_preferred_currency'
 const FALLBACK_RATES: Record<string, number> = {
   USD: 1,
   EUR: 0.92,
@@ -37,11 +36,15 @@ const CurrencyContext = createContext<CurrencyContextValue>({
 export function CurrencyProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth()
 
-  const { data: settings } = useQuery({
-    queryKey: ['settings', user?.id],
-    queryFn: () => getSettings(user!.id),
+  // Fetch the wallet — its locked `currency` field is the single source of truth.
+  // Uses the same query key as the wallet page so the navbar and wallet page
+  // share the same React Query cache entry. After a top-up, invalidating
+  // ['wallet'] updates both views simultaneously.
+  const { data: wallet } = useQuery({
+    queryKey: ['wallet'],
+    queryFn: () => getWallet(user!.id),
     enabled: !!user?.id,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 30 * 1000,
   })
 
   const { data: rates, isLoading: ratesLoading } = useQuery({
@@ -52,17 +55,15 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
   })
 
   const currency: CurrencyCode = useMemo(() => {
-    if (settings?.preferred_currency) {
-      return settings.preferred_currency as CurrencyCode
+    if (wallet?.currency) {
+      return wallet.currency as CurrencyCode
     }
-    const stored = localStorage.getItem(LS_CURRENCY_KEY)
-    if (stored) return stored as CurrencyCode
     return 'USD'
-  }, [settings?.preferred_currency])
+  }, [wallet?.currency])
 
   useEffect(() => {
     if (currency && currency !== 'USD') {
-      localStorage.setItem(LS_CURRENCY_KEY, currency)
+      localStorage.setItem('smmhub_preferred_currency', currency)
     }
   }, [currency])
 

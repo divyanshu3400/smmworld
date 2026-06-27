@@ -1,28 +1,14 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
-import {
-  Wallet,
-  TrendingUp,
-  Clock,
-  CheckCircle2,
-  Activity,
-  Bell,
-  ArrowUpRight,
-  ArrowDownRight,
-  Plus,
-  X,
-  Info,
-  AlertTriangle,
-  CheckCircle,
-  XCircle,
-  Megaphone,
-} from 'lucide-react'
+import { Wallet, TrendingUp, Clock, CircleCheck as CheckCircle2, Activity, Bell, ArrowUpRight, ArrowDownRight, Plus, X, Info, TriangleAlert as AlertTriangle, CircleCheck as CheckCircle, Circle as XCircle, Megaphone } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { getDashboardStats, getBalanceHistory, getMonthlySpending } from '@/services/dashboard.service'
 import { getRecentTransactions } from '@/services/wallet.service'
 import { getActiveAnnouncements } from '@/services/announcement.service'
 import { formatCurrency, formatDate, formatRelativeTime } from '@/lib/formatters'
+import { useCurrency } from '@/contexts/CurrencyContext'
+import { getCurrencySymbol, type CurrencyCode } from '@/lib/currency'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -56,6 +42,8 @@ const announcementTypeConfig = {
 
 export default function DashboardPage() {
   const { user, profile } = useAuth()
+  const { currency } = useCurrency()
+  const currencySymbol = getCurrencySymbol(currency as CurrencyCode)
   const firstName = profile?.first_name || 'User'
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(() => {
     try {
@@ -110,7 +98,7 @@ export default function DashboardPage() {
       value: stats?.walletBalance || 0,
       icon: Wallet,
       color: 'emerald',
-      format: (v: number) => formatCurrency(v),
+      format: (v: number) => formatCurrency(v, currency),
       href: ROUTES.WALLET,
     },
     {
@@ -252,7 +240,7 @@ export default function DashboardPage() {
                     />
                     <YAxis
                       tick={{ fontSize: 12 }}
-                      tickFormatter={(value) => `$${value}`}
+                      tickFormatter={(value) => `${currencySymbol}${value}`}
                       className="text-muted-foreground"
                     />
                     <Tooltip
@@ -261,7 +249,7 @@ export default function DashboardPage() {
                         border: '1px solid hsl(var(--border))',
                         borderRadius: '8px',
                       }}
-                      formatter={(value: number) => [formatCurrency(value), 'Balance']}
+                      formatter={(value: number) => [formatCurrency(value, currency), 'Balance']}
                       labelFormatter={(label) => formatDate(label, 'MMM d, yyyy')}
                     />
                     <Area
@@ -356,7 +344,7 @@ export default function DashboardPage() {
                           : 'text-red-500'
                       }`}>
                         {tx.type === 'credit' || tx.type === 'bonus' || tx.type === 'refund' ? '+' : '-'}
-                        {formatCurrency(tx.amount)}
+                        {formatCurrency(tx.amount, currency)}
                       </span>
                     </div>
                   ))}
@@ -389,7 +377,7 @@ export default function DashboardPage() {
                     />
                     <YAxis
                       tick={{ fontSize: 12 }}
-                      tickFormatter={(value) => `$${value}`}
+                      tickFormatter={(value) => `${currencySymbol}${value}`}
                       className="text-muted-foreground"
                     />
                     <Tooltip
@@ -398,7 +386,7 @@ export default function DashboardPage() {
                         border: '1px solid hsl(var(--border))',
                         borderRadius: '8px',
                       }}
-                      formatter={(value: number) => [formatCurrency(value), 'Spent']}
+                      formatter={(value: number) => [formatCurrency(value, currency), 'Spent']}
                     />
                     <Bar
                       dataKey="value"

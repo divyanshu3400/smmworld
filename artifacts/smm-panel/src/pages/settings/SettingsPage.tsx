@@ -5,6 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { Bell, Lock, Palette, Globe, Shield, Loader as Loader2, Save, Smartphone, Monitor, Moon, Sun } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { getSettings, updateSettings } from '@/services/settings.service'
+import { getWallet } from '@/services/wallet.service'
 import { updatePassword } from '@/services/auth.service'
 import { updatePasswordSchema } from '@/lib/validators'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -60,6 +61,17 @@ export default function SettingsPage() {
     queryFn: () => getSettings(user!.id),
     enabled: !!user?.id,
   })
+
+  const { data: wallet } = useQuery({
+    queryKey: ['wallet'],
+    queryFn: () => getWallet(user!.id),
+    enabled: !!user?.id,
+  })
+
+  const currencyLocked = (wallet?.balance ?? 0) > 0
+  const lockedCurrencySymbol = wallet?.currency
+    ? SUPPORTED_CURRENCIES[wallet.currency as CurrencyCode]?.symbol || wallet.currency
+    : ''
 
   const updateSettingsMutation = useMutation({
     mutationFn: (updates: Parameters<typeof updateSettings>[1]) =>
@@ -327,6 +339,7 @@ export default function SettingsPage() {
                       onValueChange={(value) =>
                         updateSettingsMutation.mutate({ preferred_currency: value })
                       }
+                      disabled={currencyLocked}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Select currency" />
@@ -339,6 +352,11 @@ export default function SettingsPage() {
                         ))}
                       </SelectContent>
                     </Select>
+                    {currencyLocked && (
+                      <p className="text-xs text-amber-600 dark:text-amber-400">
+                        Currency is locked because you have an active balance of {lockedCurrencySymbol}{wallet?.balance?.toFixed(2)}. Contact support to change it.
+                      </p>
+                    )}
                   </div>
                 </div>
               )}

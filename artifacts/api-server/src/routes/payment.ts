@@ -11,7 +11,7 @@ import {
   type ProviderKey,
   type PaymentSettings,
 } from "../services/paymentGateway";
-import { creditWallet, getINRtoUSD, getINRtoUSDRate, getRazorpay } from "./paymentHelpers";
+import { creditWallet, getRazorpay } from "./paymentHelpers";
 
 const router = Router();
 
@@ -124,90 +124,24 @@ router.post("/razorpay/verify", requireAuth, async (req, res) => {
       return res.status(400).json({ error: "Payment amount is zero" });
     }
 
-    // ── 3. Convert INR → USD ─────────────────────────────────────────────────
-    const inrRate = await getINRtoUSD();
-    const amountUSD = amountINR / inrRate;
+    // ── 3. Credit wallet (creditWallet handles currency locking + FX) ────────
+    const { newBalance, duplicate, currency: walletCurrency } = await creditWallet(
+      userId,
+      amountINR,
+      "INR",
+      "razorpay",
+      razorpay_payment_id
+    );
 
-    // ── 4. Fetch wallet ──────────────────────────────────────────────────────
-    const { data: wallet, error: walletErr } = await supabaseAdmin
-      .from("wallets")
-      .select("id, balance")
-      .eq("user_id", userId)
-      .single();
-
-    if (walletErr || !wallet) {
-      return res.status(404).json({ error: "Wallet not found" });
-    }
-
-    const newBalance = wallet.balance + amountUSD;
-
-    // ── 5. INSERT transaction FIRST (atomic idempotency gate) ────────────────
-    //
-    // Only ONE concurrent request per razorpay_payment_id can succeed here.
-    // The unique constraint on reference_id (wallet_transactions) ensures this.
-    // The loser gets 23505 and returns the existing credit without touching
-    // the wallet — eliminating the double-credit race window.
-    const { error: txErr } = await supabaseAdmin.from("wallet_transactions").insert({
-      wallet_id: wallet.id,
-      user_id: userId,
-      type: "credit",
-      amount: amountUSD,
-      description: `Wallet top-up via Razorpay (₹${amountINR.toFixed(2)})`,
-      reference_id: razorpay_payment_id,
-      balance_after: newBalance,
-    });
-
-    if (txErr) {
-      if (txErr.code === "23505") {
-        // Duplicate request: this payment_id was already processed.
-        // Return the original credited amount — wallet is untouched.
-        logger.info({ userId, razorpay_payment_id }, "Duplicate verify — payment_id already recorded");
-        const { data: existingTx } = await supabaseAdmin
-          .from("wallet_transactions")
-          .select("amount, balance_after")
-          .eq("reference_id", razorpay_payment_id)
-          .eq("user_id", userId)
-          .eq("type", "credit")
-          .maybeSingle();
-
-        return res.json({
-          success: true,
-          creditedUSD: existingTx?.amount ?? amountUSD,
-          newBalance: existingTx?.balance_after ?? wallet.balance,
-          paymentId: razorpay_payment_id,
-          duplicate: true,
-        });
-      }
-      throw txErr;
-    }
-
-    // ── 6. We won the insert race — now credit the wallet ────────────────────
-    //
-    // Since only one request per payment_id can reach this line, the update
-    // is safe. We use the balance we read in step 4 as the basis.
-    const { data: updated, error: updateErr } = await supabaseAdmin
-      .from("wallets")
-      .update({ balance: newBalance, updated_at: new Date().toISOString() })
-      .eq("id", wallet.id)
-      .select("id");
-
-    if (updateErr || !updated || updated.length === 0) {
-      // Wallet update failed after tx was already inserted. Log for manual review.
-      logger.error(
-        { userId, razorpay_payment_id, amountUSD, walletId: wallet.id, updateErr },
-        "CRITICAL: tx inserted but wallet update failed — manual reconciliation needed"
-      );
-      // Still return success since the tx is recorded; ops team can reconcile.
-      return res.json({ success: true, creditedUSD: amountUSD, newBalance, paymentId: razorpay_payment_id });
-    }
-
-    logger.info({ userId, razorpay_payment_id, amountINR, amountUSD, newBalance }, "Wallet credited via Razorpay");
+    logger.info({ userId, razorpay_payment_id, amountINR, walletCurrency, newBalance, duplicate }, "Wallet credited via Razorpay");
 
     return res.json({
       success: true,
-      creditedUSD: amountUSD,
+      creditedAmount: amountINR,
+      currency: walletCurrency,
       newBalance,
       paymentId: razorpay_payment_id,
+      duplicate,
     });
   } catch (err: unknown) {
     logger.error({ err, userId, razorpay_payment_id }, "Razorpay verify error");
@@ -365,7 +299,7 @@ router.post("/verify", requireAuth, async (req, res) => {
         alreadyCredited: true,
         provider: order.provider,
         amountINR: Number(order.amount_inr),
-        amountUSD: Number(order.amount_usd || 0),
+        currency: "INR",
       });
     }
 
@@ -418,13 +352,12 @@ router.post("/verify", requireAuth, async (req, res) => {
       });
     }
 
-    const amountUSD = Number(order.amount_inr) / (await getINRtoUSDRate());
-    const roundedUSD = parseFloat(amountUSD.toFixed(4));
+    const amountINR = Number(order.amount_inr);
 
-    const { newBalance, duplicate } = await creditWallet(
+    const { newBalance, duplicate, currency: walletCurrency } = await creditWallet(
       userId,
-      roundedUSD,
-      Number(order.amount_inr),
+      amountINR,
+      "INR",
       order.provider as ProviderKey,
       status.providerPaymentId || order.provider_order_id
     );
@@ -435,13 +368,13 @@ router.post("/verify", requireAuth, async (req, res) => {
       .update({
         status: "paid",
         provider_payment_id: status.providerPaymentId,
-        amount_usd: roundedUSD,
+        amount_usd: walletCurrency === "INR" ? null : amountINR,
         paid_at: new Date().toISOString(),
       })
       .eq("id", orderId);
 
     logger.info(
-      { userId, orderId, provider: order.provider, amountINR: order.amount_inr, roundedUSD, duplicate },
+      { userId, orderId, provider: order.provider, amountINR, walletCurrency, duplicate },
       "Wallet credited via gateway"
     );
 
@@ -449,8 +382,8 @@ router.post("/verify", requireAuth, async (req, res) => {
       success: true,
       duplicate,
       provider: order.provider,
-      amountINR: Number(order.amount_inr),
-      amountUSD: roundedUSD,
+      amountINR,
+      currency: walletCurrency,
       newBalance,
     });
   } catch (err) {

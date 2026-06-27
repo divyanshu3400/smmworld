@@ -6,6 +6,7 @@ import {
   User,
   Settings,
   ChevronDown,
+  Wallet,
 } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -23,16 +24,31 @@ import { getInitials, getFullName } from '@/lib/formatters'
 import { ROUTES } from '@/lib/constants'
 import { useQuery } from '@tanstack/react-query'
 import { getUnreadCount } from '@/services/notification.service'
+import { getWallet } from '@/services/wallet.service'
+import { useCurrency } from '@/contexts/CurrencyContext'
+import { getCurrencySymbol, type CurrencyCode } from '@/lib/currency'
 
 export default function TopBar() {
   const { user, profile, logout } = useAuth()
   const navigate = useNavigate()
+  const { currency } = useCurrency()
+  const currencySymbol = getCurrencySymbol(currency as CurrencyCode)
 
   const { data: unreadCount = 0 } = useQuery({
     queryKey: ['unread-count'],
     queryFn: () => getUnreadCount(user!.id),
     enabled: !!user,
     refetchInterval: 30000,
+  })
+
+  // Same query key as the wallet page — shares the React Query cache.
+  // When the wallet page invalidates ['wallet'] after a top-up, this
+  // balance updates automatically with no extra fetch.
+  const { data: wallet } = useQuery({
+    queryKey: ['wallet'],
+    queryFn: () => getWallet(user!.id),
+    enabled: !!user?.id,
+    staleTime: 30 * 1000,
   })
 
   const handleLogout = async () => {
@@ -66,6 +82,16 @@ export default function TopBar() {
         </form>
 
         <div className="flex flex-1 items-center justify-end gap-x-4">
+          <button
+            type="button"
+            onClick={() => navigate(ROUTES.WALLET)}
+            className="flex items-center gap-2 rounded-lg border border-border bg-muted/50 px-3 py-1.5 text-sm font-medium hover:bg-muted transition-colors"
+            title="Wallet balance"
+          >
+            <Wallet className="h-4 w-4 text-emerald-500" />
+            <span>{currencySymbol}{(wallet?.balance ?? 0).toFixed(2)}</span>
+          </button>
+
           <button
             type="button"
             onClick={() => navigate(ROUTES.NOTIFICATIONS)}

@@ -3,7 +3,7 @@ import express from "express";
 import crypto from "crypto";
 import { logger } from "../lib/logger";
 import { supabaseAdmin } from "../lib/supabaseAdmin";
-import { creditWallet, getINRtoUSDRate } from "./paymentHelpers";
+import { creditWallet } from "./paymentHelpers";
 
 const webhookRouter = Router();
 
@@ -124,15 +124,12 @@ webhookRouter.post(
                 return res.status(200).json({ received: true }); // always 200 to Cashfree
             }
 
-            // ── 7. Convert & credit wallet (same helper as /verify) ───────────────
+            // ── 7. Credit wallet (creditWallet handles currency locking + FX) ──────
             // Credit the actual amount charged (payment_amount), not the order amount.
-            const inrRate = await getINRtoUSDRate();
-            const roundedUSD = parseFloat((paymentAmountINR / inrRate).toFixed(4));
-
-            const { newBalance, duplicate } = await creditWallet(
+            const { newBalance, duplicate, currency: walletCurrency } = await creditWallet(
                 order.user_id,
-                roundedUSD,
                 paymentAmountINR,
+                "INR",
                 "cashfree",
                 providerPaymentId
             );
@@ -143,7 +140,7 @@ webhookRouter.post(
                 .update({
                     status: "paid",
                     provider_payment_id: providerPaymentId,
-                    amount_usd: roundedUSD,
+                    amount_usd: walletCurrency === "INR" ? null : paymentAmountINR,
                     paid_at: new Date().toISOString(),
                 })
                 .eq("id", order.id);
@@ -155,7 +152,8 @@ webhookRouter.post(
                     providerPaymentId,
                     orderAmountINR,
                     paymentAmountINR,
-                    roundedUSD,
+                    walletCurrency,
+                    newBalance,
                     duplicate,
                     webhookVersion,
                 },
