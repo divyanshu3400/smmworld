@@ -16,7 +16,7 @@ const fadeUp = {
 
 export default function PageHero({ badge, title, subtitle, breadcrumbs }: PageHeroProps) {
   return (
-    <section className="relative overflow-hidden py-20 px-6">
+    <section className="relative overflow-hidden pt-12 pb-20 px-6">
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute -top-20 -right-20 w-[400px] h-[400px] rounded-full bg-emerald-500/8 blur-[100px] animate-glow-pulse" />
         <div className="absolute -bottom-20 -left-20 w-[300px] h-[300px] rounded-full bg-teal-500/6 blur-[80px] animate-glow-pulse" style={{ animationDelay: '2s' }} />

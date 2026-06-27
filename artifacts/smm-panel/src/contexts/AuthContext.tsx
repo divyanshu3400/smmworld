@@ -8,6 +8,7 @@ import {
 import type { User, Session } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
 import { getProfile, signInWithEmail, signUpWithEmail, signOut as authSignOut, signInWithGoogle, resetPassword, updatePassword } from '@/services/auth.service'
+import { getAuthenticatorAssuranceLevel } from '@/services/mfa.service'
 import type { Profile } from '@/types/database'
 import type { LoginCredentials, SignupCredentials } from '@/types/auth'
 import { handleSupabaseError } from '@/lib/error-handler'
@@ -19,6 +20,7 @@ interface AuthContextValue {
   loading: boolean
   initialized: boolean
   error: string | null
+  needsMfa: boolean
   login: (credentials: LoginCredentials) => Promise<void>
   signup: (credentials: SignupCredentials) => Promise<void>
   loginWithGoogle: () => Promise<void>
@@ -42,6 +44,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [loading, setLoading] = useState(true)
   const [initialized, setInitialized] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [needsMfa, setNeedsMfa] = useState(false)
 
   const clearError = useCallback(() => setError(null), [])
 
@@ -113,12 +116,18 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const login = useCallback(async (credentials: LoginCredentials) => {
     setLoading(true)
     setError(null)
+    setNeedsMfa(false)
     try {
       const data = await signInWithEmail(credentials)
       setSession(data.session)
       setUser(data.user)
       const profileData = await getProfile(data.user.id)
       setProfile(profileData)
+
+      const aal = await getAuthenticatorAssuranceLevel()
+      if (aal.nextLevel === 'aal2' && aal.currentLevel !== 'aal2') {
+        setNeedsMfa(true)
+      }
     } catch (err) {
       const appError = handleSupabaseError(err)
       setError(appError.message)
@@ -206,6 +215,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       loading,
       initialized,
       error,
+      needsMfa,
       login,
       signup,
       loginWithGoogle,
@@ -222,6 +232,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       loading,
       initialized,
       error,
+      needsMfa,
       login,
       signup,
       loginWithGoogle,

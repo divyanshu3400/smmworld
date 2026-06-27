@@ -1,9 +1,9 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Loader2 } from 'lucide-react'
+import { Loader as Loader2 } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { loginSchema } from '@/lib/validators'
 import { Button } from '@/components/ui/button'
@@ -23,7 +23,7 @@ import type { z } from 'zod'
 type LoginFormData = z.infer<typeof loginSchema>
 
 export default function LoginPage() {
-  const { login, loginWithGoogle, error, clearError } = useAuth()
+  const { login, loginWithGoogle, error, clearError, needsMfa } = useAuth()
   const navigate = useNavigate()
   const [loading, setLoading] = useState(false)
   const [googleLoading, setGoogleLoading] = useState(false)
@@ -37,6 +37,12 @@ export default function LoginPage() {
     },
   })
 
+  useEffect(() => {
+    if (needsMfa) {
+      navigate('/verify-mfa', { replace: true })
+    }
+  }, [needsMfa, navigate])
+
   const onSubmit = async (data: LoginFormData) => {
     setLoading(true)
     clearError()
@@ -46,7 +52,9 @@ export default function LoginPage() {
         password: data.password,
         rememberMe: data.rememberMe,
       })
-      navigate('/dashboard')
+      if (!needsMfa) {
+        navigate('/dashboard')
+      }
     } catch {
       // Error is handled by auth context
     } finally {

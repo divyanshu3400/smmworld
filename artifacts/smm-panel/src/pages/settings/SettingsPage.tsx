@@ -2,19 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import {
-  Bell,
-  Lock,
-  Palette,
-  Globe,
-  Shield,
-  Loader2,
-  Save,
-  Smartphone,
-  Monitor,
-  Moon,
-  Sun,
-} from 'lucide-react'
+import { Bell, Lock, Palette, Globe, Shield, Loader as Loader2, Save, Smartphone, Monitor, Moon, Sun } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { getSettings, updateSettings } from '@/services/settings.service'
 import { updatePassword } from '@/services/auth.service'
@@ -45,6 +33,7 @@ import {
 import { toast } from 'sonner'
 import { TIMEZONES } from '@/lib/constants'
 import { SUPPORTED_CURRENCIES, type CurrencyCode } from '@/lib/currency'
+import TwoFactorAuth from '@/components/settings/TwoFactorAuth'
 import type { z } from 'zod'
 
 type PasswordFormData = z.infer<typeof updatePasswordSchema>
@@ -447,26 +436,16 @@ export default function SettingsPage() {
         </motion.div>
 
         <motion.div variants={item} className="lg:col-span-2">
-          <Card className="border-red-500/20">
+          <Card className="border-emerald-500/20">
             <CardHeader>
               <div className="flex items-center gap-2">
-                <Shield className="h-5 w-5 text-red-500" />
-                <CardTitle className="text-red-500">Two-Factor Authentication</CardTitle>
+                <Shield className="h-5 w-5 text-emerald-500" />
+                <CardTitle>Two-Factor Authentication</CardTitle>
               </div>
               <CardDescription>Add an extra layer of security to your account</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">
-                    Two-factor authentication adds an additional layer of security
-                    to your account by requiring more than just a password to sign in.
-                  </p>
-                </div>
-                <Button variant="outline" disabled>
-                  Coming soon
-                </Button>
-              </div>
+              <TwoFactorAuth />
             </CardContent>
           </Card>
         </motion.div>

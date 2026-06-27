@@ -28,6 +28,7 @@ const SignupPage = lazy(() => import('@/pages/auth/SignupPage'))
 const ForgotPasswordPage = lazy(() => import('@/pages/auth/ForgotPasswordPage'))
 const ResetPasswordPage = lazy(() => import('@/pages/auth/ResetPasswordPage'))
 const AuthCallbackPage = lazy(() => import('@/pages/auth/AuthCallbackPage'))
+const MfaVerifyPage = lazy(() => import('@/pages/auth/MfaVerifyPage'))
 
 // Dashboard pages
 const DashboardPage = lazy(() => import('@/pages/dashboard/DashboardPage'))
@@ -88,6 +89,7 @@ export const router = createBrowserRouter([
       { path: 'signup', element: withSuspense(SignupPage) },
       { path: 'forgot-password', element: withSuspense(ForgotPasswordPage) },
       { path: 'reset-password', element: withSuspense(ResetPasswordPage) },
+      { path: 'verify-mfa', element: withSuspense(MfaVerifyPage) },
     ],
   },
   {
