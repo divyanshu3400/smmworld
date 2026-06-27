@@ -2,10 +2,12 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Loader2, Camera, Save, Shield, Monitor } from 'lucide-react'
+import { Loader as Loader2, Camera, Save, Shield, ShieldCheck, Monitor } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { updateProfile, uploadAvatar } from '@/services/auth.service'
 import { getSettings, updateSettings } from '@/services/settings.service'
+import { listFactors } from '@/services/mfa.service'
 import { profileSchema } from '@/lib/validators'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -56,6 +58,13 @@ export default function ProfilePage() {
     queryFn: () => getSettings(user!.id),
     enabled: !!user?.id,
   })
+
+  const { data: mfaFactors = [] } = useQuery({
+    queryKey: ['mfa-factors'],
+    queryFn: listFactors,
+    enabled: !!user,
+  })
+  const mfaEnabled = mfaFactors.some((f) => f.status === 'verified')
 
   const form = useForm<ProfileFormData>({
     resolver: zodResolver(profileSchema),
@@ -173,10 +182,21 @@ export default function ProfilePage() {
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <Shield className="h-4 w-4 text-muted-foreground" />
+                    {mfaEnabled ? (
+                      <ShieldCheck className="h-4 w-4 text-emerald-500" />
+                    ) : (
+                      <Shield className="h-4 w-4 text-muted-foreground" />
+                    )}
                     <span className="text-sm">Two-factor auth</span>
                   </div>
-                  <Badge variant="secondary">Coming soon</Badge>
+                  <Link to="/settings">
+                    <Badge
+                      variant={mfaEnabled ? 'default' : 'secondary'}
+                      className={mfaEnabled ? 'bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 border-0 cursor-pointer' : 'cursor-pointer'}
+                    >
+                      {mfaEnabled ? 'Enabled' : 'Set up'}
+                    </Badge>
+                  </Link>
                 </div>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">

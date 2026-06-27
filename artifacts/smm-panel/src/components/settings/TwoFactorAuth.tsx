@@ -33,6 +33,7 @@ export default function TwoFactorAuth() {
   const [factorId, setFactorId] = useState('')
   const [code, setCode] = useState('')
   const [copied, setCopied] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
   const [unenrollTarget, setUnenrollTarget] = useState<MFAFactor | null>(null)
   const [unenrollOpen, setUnenrollOpen] = useState(false)
 
@@ -72,7 +73,7 @@ export default function TwoFactorAuth() {
 
   const handleVerify = async () => {
     if (code.length !== 6) return
-    setStep('done')
+    setSubmitting(true)
     try {
       await verifyTOTP(factorId, code)
       toast.success('Two-factor authentication enabled')
@@ -85,7 +86,8 @@ export default function TwoFactorAuth() {
       fetchFactors()
     } catch {
       toast.error('Invalid verification code. Please try again.')
-      setStep('verifying')
+    } finally {
+      setSubmitting(false)
     }
   }
 
@@ -255,9 +257,9 @@ export default function TwoFactorAuth() {
                 <Button
                   className="w-full bg-emerald-500 hover:bg-emerald-600"
                   onClick={handleVerify}
-                  disabled={code.length !== 6 || step === 'done'}
+                  disabled={code.length !== 6 || submitting}
                 >
-                  {step === 'done' ? (
+                  {submitting ? (
                     <>
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                       Verifying...

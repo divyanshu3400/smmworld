@@ -81,7 +81,6 @@ export async function verifyChallenge(factorId: string, challengeId: string, cod
 export async function getAuthenticatorAssuranceLevel(): Promise<{
   currentLevel: 'aal1' | 'aal2' | null
   nextLevel: 'aal1' | 'aal2' | null
-  currentAuthenticationMethods: string[]
 }> {
   const { data, error } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
 
@@ -89,6 +88,5 @@ export async function getAuthenticatorAssuranceLevel(): Promise<{
   return {
     currentLevel: data.currentLevel as 'aal1' | 'aal2' | null,
     nextLevel: data.nextLevel as 'aal1' | 'aal2' | null,
-    currentAuthenticationMethods: data.currentAuthenticationMethods,
   }
 }
