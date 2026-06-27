@@ -206,8 +206,37 @@ export default function WalletPage() {
     loadRazorpayScript()
     loadCashfreeScript()
   }, [])
+  // Auto-verify when returning from Cashfree redirect
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const orderId = params.get('order_id')
+    if (!orderId) return
 
-  // Poll for payment status while waiting (UPI Collect on desktop).
+    // Clean the URL immediately
+    window.history.replaceState({}, '', '/wallet')
+
+    setAddFundsOpen(true)
+    setActiveOrderId(orderId)
+    setPaymentState('verifying')
+
+    verifyGatewayPayment(orderId).then((result) => {
+      if (result.success) {
+        setPaymentState('done')
+        toast.success(`₹${result.amountINR} added successfully! Wallet credited.`)
+        queryClient.invalidateQueries({ queryKey: ['wallet'] })
+        queryClient.invalidateQueries({ queryKey: ['transactions'] })
+      } else {
+        setPaymentState('waiting')
+        setActiveOrderId(orderId)
+        setStatusMessage(result.message || 'Payment not confirmed yet. Click verify if you have paid.')
+      }
+    }).catch(() => {
+      setPaymentState('waiting')
+      setActiveOrderId(orderId)
+      setStatusMessage('Could not verify automatically. Click verify if you have paid.')
+    })
+  }, [])
+
   useEffect(() => {
     if (paymentState !== 'waiting' || !activeOrderId) return
     let cancelled = false
