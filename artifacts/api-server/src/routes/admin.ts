@@ -9,6 +9,7 @@ import {
   fetchBalance,
   fetchOrderStatus,
   cancelProviderOrder,
+  syncServicesToCache,
 } from "../services/smmService";
 import { isProviderConfigured } from "../services/paymentGateway";
 
@@ -562,6 +563,141 @@ router.get("/payment-orders", requireAdmin, async (req, res) => {
   }
 
   return res.json({ orders: orders || [], total: count || 0, page, limit });
+});
+
+// ── GET /api/admin/platform-settings ───────────────────────────────────────────
+router.get("/platform-settings", requireAdmin, async (req, res) => {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("platform_settings")
+      .select("*")
+      .eq("id", 1)
+      .maybeSingle();
+
+    if (error) throw error;
+
+    const settings = data || {
+      id: 1,
+      markup_percent: 20,
+      cashfree_fee_percent: 2,
+      updated_at: null,
+      updated_by: null,
+    };
+
+    res.json(settings);
+  } catch (err) {
+    logger.error({ err }, "Failed to fetch platform settings");
+    res.status(500).json({ error: "Failed to load platform settings" });
+  }
+});
+
+// ── PUT /api/admin/platform-settings ───────────────────────────────────────────
+const PlatformSettingsSchema = z.object({
+  markup_percent: z.number().min(0).max(500).optional(),
+  cashfree_fee_percent: z.number().min(0).max(100).optional(),
+});
+
+router.put("/platform-settings", requireAdmin, async (req, res) => {
+  const parsed = PlatformSettingsSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: "Invalid settings", details: parsed.error.flatten() });
+  }
+
+  const updates = { ...parsed.data, updated_at: new Date().toISOString(), updated_by: req.userId };
+
+  try {
+    const { error } = await supabaseAdmin
+      .from("platform_settings")
+      .update(updates)
+      .eq("id", 1);
+
+    if (error) {
+      logger.error({ error }, "Failed to update platform settings");
+      return res.status(500).json({ error: "Failed to save settings" });
+    }
+
+    logger.info({ updates, adminId: req.userId }, "Platform settings updated");
+    return res.json({ success: true });
+  } catch (err) {
+    logger.error({ err }, "Platform settings update error");
+    return res.status(500).json({ error: "Failed to save settings" });
+  }
+});
+
+// ── POST /api/admin/sync-services ──────────────────────────────────────────────
+router.post("/sync-services", requireAdmin, async (req, res) => {
+  try {
+    const result = await syncServicesToCache();
+
+    if (result.error) {
+      return res.status(500).json({ error: result.error });
+    }
+
+    logger.info({ count: result.count, adminId: req.userId }, "Services synced to cache");
+    res.json({ success: true, count: result.count });
+  } catch (err) {
+    logger.error({ err }, "Failed to sync services");
+    res.status(500).json({ error: "Failed to sync services" });
+  }
+});
+
+// ── GET /api/admin/services-cached ─────────────────────────────────────────────
+router.get("/services-cached", requireAdmin, async (req, res) => {
+  const page = Math.max(1, parseInt(String(req.query.page || "1")));
+  const limit = Math.min(100, parseInt(String(req.query.limit || "50")));
+  const search = String(req.query.search || "").trim();
+  const category = String(req.query.category || "");
+  const from = (page - 1) * limit;
+  const to = from + limit - 1;
+
+  let query = supabaseAdmin
+    .from("smm_services_cache")
+    .select("*", { count: "exact" })
+    .order("name", { ascending: true });
+
+  if (search) {
+    query = query.ilike("name", `%${search}%`);
+  }
+  if (category) {
+    query = query.eq("category", category);
+  }
+
+  const { data: services, error, count } = await query.range(from, to);
+
+  if (error) {
+    return res.status(500).json({ error: "Failed to fetch services" });
+  }
+
+  // Get current markup to compute sell rates
+  const { data: settings } = await supabaseAdmin
+    .from("platform_settings")
+    .select("markup_percent")
+    .eq("id", 1)
+    .maybeSingle();
+
+  const markupPercent = Number(settings?.markup_percent ?? 20);
+
+  const enriched = (services || []).map((s) => ({
+    ...s,
+    sell_rate_inr: s.provider_rate_inr ? Number(s.provider_rate_inr) * (1 + markupPercent / 100) : null,
+  }));
+
+  res.json({ services: enriched, total: count || 0, page, limit, markup_percent: markupPercent });
+});
+
+// ── GET /api/admin/service-categories ─────────────────────────────────────────
+router.get("/service-categories", requireAdmin, async (req, res) => {
+  const { data, error } = await supabaseAdmin
+    .from("smm_services_cache")
+    .select("category")
+    .not("category", "is", null);
+
+  if (error) {
+    return res.status(500).json({ error: "Failed to fetch categories" });
+  }
+
+  const categories = [...new Set((data || []).map((r) => r.category).filter(Boolean))];
+  res.json({ categories: categories.sort() });
 });
 
 export default router;

@@ -124,23 +124,39 @@ webhookRouter.post(
                 return res.status(200).json({ received: true }); // always 200 to Cashfree
             }
 
-            // ── 7. Credit wallet (creditWallet handles currency locking + FX) ──────
-            // Credit the actual amount charged (payment_amount), not the order amount.
+            // ── 7. Get platform settings for gateway fee ─────────────────────────────
+            const { data: platformSettings } = await supabaseAdmin
+                .from("platform_settings")
+                .select("cashfree_fee_percent")
+                .eq("id", 1)
+                .maybeSingle();
+
+            const feePercent = Number(platformSettings?.cashfree_fee_percent ?? 0);
+            const feeAmountINR = paymentAmountINR * (feePercent / 100);
+            const netCreditINR = paymentAmountINR - feeAmountINR;
+
+            // ── 8. Credit wallet (creditWallet handles currency locking + FX) ──────
+            // Credit the net amount (after fee deduction), not the full payment amount.
+            const feeNote = feePercent > 0
+                ? ` (Gateway fee ${feePercent}%: ₹${feeAmountINR.toFixed(2)} deducted from ₹${paymentAmountINR.toFixed(2)})`
+                : "";
+
             const { newBalance, duplicate, currency: walletCurrency } = await creditWallet(
                 order.user_id,
-                paymentAmountINR,
+                netCreditINR,
                 "INR",
                 "cashfree",
-                providerPaymentId
+                providerPaymentId,
+                feeNote
             );
 
-            // ── 8. Mark order paid ────────────────────────────────────────────────
+            // ── 9. Mark order paid ────────────────────────────────────────────────
             await supabaseAdmin
                 .from("payment_orders")
                 .update({
                     status: "paid",
                     provider_payment_id: providerPaymentId,
-                    amount_usd: walletCurrency === "INR" ? null : paymentAmountINR,
+                    amount_usd: walletCurrency === "INR" ? null : netCreditINR,
                     paid_at: new Date().toISOString(),
                 })
                 .eq("id", order.id);
@@ -152,6 +168,9 @@ webhookRouter.post(
                     providerPaymentId,
                     orderAmountINR,
                     paymentAmountINR,
+                    feePercent,
+                    feeAmountINR,
+                    netCreditINR,
                     walletCurrency,
                     newBalance,
                     duplicate,

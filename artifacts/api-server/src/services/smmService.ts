@@ -1,4 +1,5 @@
 import { logger } from "../lib/logger";
+import { supabaseAdmin } from "../lib/supabaseAdmin";
 
 const SMM_API_URL = "https://worldofsmm.com/api/v2";
 const MAX_RETRIES = 3;
@@ -116,6 +117,84 @@ export interface OrderStatus {
 
 export async function fetchServices(): Promise<SMMService[]> {
   return smmRequest<SMMService[]>({ action: "services" });
+}
+
+/**
+ * Syncs the WorldOfSMM service catalog to the local smm_services_cache table.
+ * Converts provider rates to INR using the USD→INR exchange rate.
+ * Returns the count of services synced.
+ */
+export async function syncServicesToCache(): Promise<{ count: number; error?: string }> {
+  const services = await fetchServices();
+
+  const { data: exchangeRateRow, error: rateErr } = await supabaseAdmin
+    .from("exchange_rates")
+    .select("rate")
+    .eq("base_currency", "USD")
+    .eq("target_currency", "INR")
+    .maybeSingle();
+
+  if (rateErr || !exchangeRateRow?.rate) {
+    return { count: 0, error: "USD→INR exchange rate not configured" };
+  }
+
+  const usdToInr = Number(exchangeRateRow.rate);
+  const now = new Date().toISOString();
+
+  const rows = services.map((s) => ({
+    service_id: s.service,
+    name: s.name,
+    type: s.type || null,
+    category: s.category || null,
+    description: s.description || null,
+    provider_rate: s.rate,
+    provider_rate_inr: parseFloat(s.rate) * usdToInr,
+    min: s.min,
+    max: s.max,
+    last_synced_at: now,
+  }));
+
+  // Upsert all services (insert new, update existing)
+  const { error: upsertErr } = await supabaseAdmin
+    .from("smm_services_cache")
+    .upsert(rows, { onConflict: "service_id" });
+
+  if (upsertErr) {
+    return { count: 0, error: upsertErr.message };
+  }
+
+  return { count: services.length };
+}
+
+/**
+ * Gets the sell rate (INR per 1000 units) for a service, applying the global markup.
+ * Returns null if the service is not found in cache.
+ */
+export async function getServiceSellRate(
+  serviceId: number
+): Promise<{ sellRateInr: number; providerRateInr: number; markupPercent: number } | null> {
+  const [serviceResult, settingsResult] = await Promise.all([
+    supabaseAdmin
+      .from("smm_services_cache")
+      .select("provider_rate_inr")
+      .eq("service_id", serviceId)
+      .maybeSingle(),
+    supabaseAdmin
+      .from("platform_settings")
+      .select("markup_percent")
+      .eq("id", 1)
+      .maybeSingle(),
+  ]);
+
+  if (serviceResult.error || !serviceResult.data?.provider_rate_inr) {
+    return null;
+  }
+
+  const providerRateInr = Number(serviceResult.data.provider_rate_inr);
+  const markupPercent = Number(settingsResult.data?.markup_percent ?? 20);
+  const sellRateInr = providerRateInr * (1 + markupPercent / 100);
+
+  return { sellRateInr, providerRateInr, markupPercent };
 }
 
 export async function fetchBalance(): Promise<BalanceResponse> {

@@ -11,23 +11,26 @@ export function getRazorpay() {
     return new Razorpay({ key_id, key_secret });
 }
 
-export async function getINRtoUSD(): Promise<number> {
-    const { data } = await supabaseAdmin
+/**
+ * Gets the USD → target currency exchange rate from the exchange_rates table.
+ * Returns 1 if the target is USD (no conversion needed).
+ * Throws if no rate is configured for the currency.
+ */
+async function getUsdToCurrencyRate(currency: string): Promise<number> {
+    if (currency === "USD") return 1;
+
+    const { data, error } = await supabaseAdmin
         .from("exchange_rates")
         .select("rate")
-        .eq("target_currency", "INR")
-        .single();
-    return data?.rate || 83.5;
-}
-
-
-export async function getINRtoUSDRate(): Promise<number> {
-    const { data } = await supabaseAdmin
-        .from("exchange_rates")
-        .select("rate")
-        .eq("target_currency", "INR")
+        .eq("base_currency", "USD")
+        .eq("target_currency", currency)
         .maybeSingle();
-    return data?.rate || 83.5;
+
+    if (error || !data?.rate) {
+        throw new Error(`No USD exchange rate configured for ${currency}`);
+    }
+
+    return Number(data.rate);
 }
 
 /**
@@ -68,8 +71,11 @@ async function resolveWalletCurrency(
 }
 
 /**
- * Converts an amount from one currency to another using the exchange_rates
- * table. Includes a sanity-bounds check on the rate.
+ * Converts an amount from one currency to another by bridging through USD.
+ * All rates in exchange_rates are stored as USD → target, so:
+ *   - fromCurrency → USD: divide by fromCurrency rate
+ *   - USD → toCurrency: multiply by toCurrency rate
+ * Result: (amount / fromRate) * toRate
  */
 async function convertCurrency(
     amount: number,
@@ -78,27 +84,13 @@ async function convertCurrency(
 ): Promise<number> {
     if (fromCurrency === toCurrency) return amount;
 
-    // We only support INR↔USD conversion today.
-    if (fromCurrency === "INR" && toCurrency === "USD") {
-        const rate = await getINRtoUSDRate();
-        // Sanity check: INR rate should be between 70 and 100.
-        if (rate < 70 || rate > 100) {
-            logger.warn({ rate }, "INR rate outside expected bounds — using fallback 83.5");
-            return parseFloat((amount / 83.5).toFixed(4));
-        }
-        return parseFloat((amount / rate).toFixed(4));
-    }
+    const fromRate = await getUsdToCurrencyRate(fromCurrency);
+    const toRate = await getUsdToCurrencyRate(toCurrency);
 
-    if (fromCurrency === "USD" && toCurrency === "INR") {
-        const rate = await getINRtoUSDRate();
-        if (rate < 70 || rate > 100) {
-            logger.warn({ rate }, "INR rate outside expected bounds — using fallback 83.5");
-            return parseFloat((amount * 83.5).toFixed(4));
-        }
-        return parseFloat((amount * rate).toFixed(4));
-    }
+    const usdEquivalent = amount / fromRate;
+    const result = usdEquivalent * toRate;
 
-    throw new Error(`Unsupported currency conversion: ${fromCurrency} → ${toCurrency}`);
+    return parseFloat(result.toFixed(4));
 }
 
 /**
@@ -108,14 +100,18 @@ async function convertCurrency(
  *
  * The amount is credited in the wallet's locked currency. If the gateway
  * payment currency matches the wallet currency, no FX conversion happens.
- * If they differ, FX conversion is applied with a sanity-bounds check.
+ * If they differ, FX conversion is applied.
+ *
+ * @param descriptionSuffix - Optional text to append to the transaction description
+ *   (e.g., " (Gateway fee 2%: ₹1.00 deducted from ₹50.00)")
  */
 export async function creditWallet(
     userId: string,
     paymentAmount: number,
     paymentCurrency: string,
     provider: ProviderKey,
-    providerPaymentId: string
+    providerPaymentId: string,
+    descriptionSuffix?: string
 ): Promise<{ newBalance: number; duplicate: boolean; currency: string }> {
     const { data: wallet, error: walletErr } = await supabaseAdmin
         .from("wallets")
@@ -143,12 +139,14 @@ export async function creditWallet(
     const newBalance = Number(wallet.balance) + creditAmount;
     const referenceId = `${provider}_${providerPaymentId}`;
 
+    const description = `Wallet top-up via ${provider} (${paymentCurrency} ${paymentAmount.toFixed(2)})${descriptionSuffix || ""}`;
+
     const { error: txErr } = await supabaseAdmin.from("wallet_transactions").insert({
         wallet_id: wallet.id,
         user_id: userId,
         type: "credit",
         amount: creditAmount,
-        description: `Wallet top-up via ${provider} (${paymentCurrency} ${paymentAmount.toFixed(2)})`,
+        description,
         reference_id: referenceId,
         balance_after: newBalance,
     });

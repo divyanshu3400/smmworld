@@ -11,6 +11,7 @@ import {
   submitOrder,
   fetchOrderStatus,
   cancelProviderOrder,
+  getServiceSellRate,
 } from "../services/smmService";
 
 const router = Router();
@@ -31,14 +32,43 @@ const generalLimiter = rateLimit({
 });
 
 // ── GET /api/smm/services ────────────────────────────────────────────────────
-// Public — no auth required (services catalog is public)
+// Returns services from cache (not live API call), enriched with sell_rate_inr
 router.get("/services", generalLimiter, async (req, res) => {
   try {
-    const services = await fetchServices();
-    res.json({ services });
+    const [servicesResult, settingsResult] = await Promise.all([
+      supabaseAdmin
+        .from("smm_services_cache")
+        .select("*")
+        .order("name", { ascending: true }),
+      supabaseAdmin
+        .from("platform_settings")
+        .select("markup_percent")
+        .eq("id", 1)
+        .maybeSingle(),
+    ]);
+
+    if (servicesResult.error) {
+      logger.error({ error: servicesResult.error }, "Failed to fetch services from cache");
+      return res.status(500).json({ error: "Failed to fetch services" });
+    }
+
+    const markupPercent = Number(settingsResult.data?.markup_percent ?? 20);
+    const services = (servicesResult.data || []).map((s) => ({
+      service: s.service_id,
+      name: s.name,
+      type: s.type,
+      category: s.category,
+      description: s.description,
+      rate: s.provider_rate_inr ? (Number(s.provider_rate_inr) * (1 + markupPercent / 100)).toFixed(4) : s.provider_rate,
+      provider_rate: s.provider_rate,
+      min: s.min,
+      max: s.max,
+    }));
+
+    res.json({ services, markup_percent: markupPercent });
   } catch (err) {
     logger.error({ err }, "Failed to fetch SMM services");
-    res.status(502).json({ error: "Failed to fetch services from provider" });
+    res.status(502).json({ error: "Failed to fetch services" });
   }
 });
 
@@ -54,14 +84,50 @@ router.get("/balance", requireAdmin, generalLimiter, async (req, res) => {
   }
 });
 
+// ── Helper: convert amount to USD for wallet comparison ────────────────────────
+async function convertToUsd(amountInr: number): Promise<number> {
+  const { data } = await supabaseAdmin
+    .from("exchange_rates")
+    .select("rate")
+    .eq("base_currency", "USD")
+    .eq("target_currency", "INR")
+    .maybeSingle();
+
+  if (!data?.rate) {
+    // Fallback rate
+    return amountInr / 83.5;
+  }
+
+  return amountInr / Number(data.rate);
+}
+
+// ── Helper: convert amount to INR ───────────────────────────────────────────────
+async function convertToInr(amountUsd: number): Promise<number> {
+  const { data } = await supabaseAdmin
+    .from("exchange_rates")
+    .select("rate")
+    .eq("base_currency", "USD")
+    .eq("target_currency", "INR")
+    .maybeSingle();
+
+  if (!data?.rate) {
+    return amountUsd * 83.5;
+  }
+
+  return amountUsd * Number(data.rate);
+}
+
 // ── POST /api/smm/order ──────────────────────────────────────────────────────
+// Price is computed from sell_rate_inr = provider_rate_inr * (1 + markup/100)
+// User is charged in their wallet currency
 const CreateOrderSchema = z.object({
   serviceId: z.number().int().positive(),
   serviceName: z.string().min(1).max(500),
   platform: z.string().min(1).max(100),
   link: z.string().url("Invalid URL"),
   quantity: z.number().int().positive(),
-  priceUsd: z.number().positive(),
+  // priceUsd is deprecated - price is now computed server-side
+  priceUsd: z.number().positive().optional(),
 });
 
 router.post("/order", requireAuth, orderLimiter, async (req, res) => {
@@ -73,9 +139,50 @@ router.post("/order", requireAuth, orderLimiter, async (req, res) => {
     return;
   }
 
-  const { serviceId, serviceName, platform, link, quantity, priceUsd } = parsed.data;
+  const { serviceId, serviceName, platform, link, quantity } = parsed.data;
 
-  // 1. Get user wallet
+  // 1. Get pricing info from cache
+  const pricing = await getServiceSellRate(serviceId);
+  if (!pricing) {
+    // Service not in cache - try to sync first or reject
+    res.status(400).json({ error: "Service not found in catalog. Admin must sync services first." });
+    return;
+  }
+
+  const { sellRateInr, providerRateInr, markupPercent } = pricing;
+
+  // Calculate cost: sell_rate_inr is per 1000 units
+  const userChargedInr = (sellRateInr * quantity) / 1000;
+  const providerCostInr = (providerRateInr * quantity) / 1000;
+
+  // 2. Check provider balance before accepting order
+  try {
+    const providerBalance = await fetchBalance();
+    const providerBalanceNum = parseFloat(providerBalance.balance);
+
+    // Provider cost in USD (provider uses USD typically)
+    const providerCostUsd = providerCostInr / (await (async () => {
+      const { data } = await supabaseAdmin
+        .from("exchange_rates")
+        .select("rate")
+        .eq("base_currency", "USD")
+        .eq("target_currency", "INR")
+        .maybeSingle();
+      return Number(data?.rate ?? 83.5);
+    })());
+
+    if (providerBalanceNum < providerCostUsd * 0.9) {
+      // Warn but don't block - let admin know balance is low
+      logger.warn(
+        { providerBalance: providerBalanceNum, providerCostUsd },
+        "Provider balance too low for order"
+      );
+    }
+  } catch (err) {
+    logger.warn({ err }, "Could not check provider balance, continuing anyway");
+  }
+
+  // 3. Get user wallet
   const { data: wallet, error: walletErr } = await supabaseAdmin
     .from("wallets")
     .select("id, balance, currency")
@@ -87,20 +194,40 @@ router.post("/order", requireAuth, orderLimiter, async (req, res) => {
     return;
   }
 
-  // 2. Check balance (compare in USD)
-  if (wallet.balance < priceUsd) {
-    res.status(400).json({ error: "Insufficient wallet balance" });
+  // 4. Convert user charge to wallet currency for comparison
+  let chargeInWalletCurrency: number;
+  let userChargedAmount: number;
+  let userChargedCurrency: string;
+
+  if (wallet.currency === "INR") {
+    chargeInWalletCurrency = userChargedInr;
+    userChargedAmount = userChargedInr;
+    userChargedCurrency = "INR";
+  } else {
+    // Convert INR price to wallet currency (via USD)
+    const userChargedUsd = await convertToUsd(userChargedInr);
+    chargeInWalletCurrency = userChargedUsd;
+    userChargedAmount = userChargedUsd;
+    userChargedCurrency = wallet.currency || "USD";
+  }
+
+  // 5. Check balance
+  if (wallet.balance < chargeInWalletCurrency) {
+    res.status(400).json({
+      error: "Insufficient wallet balance",
+      required: chargeInWalletCurrency,
+      currency: userChargedCurrency,
+    });
     return;
   }
 
-  // 3. Deduct balance atomically (optimistic — before provider call)
-  // Use .select() so we can detect 0-row updates (balance changed under us).
-  const newBalance = wallet.balance - priceUsd;
+  // 6. Deduct balance atomically
+  const newBalance = wallet.balance - chargeInWalletCurrency;
   const { data: deducted, error: deductErr } = await supabaseAdmin
     .from("wallets")
     .update({ balance: newBalance, updated_at: new Date().toISOString() })
     .eq("id", wallet.id)
-    .eq("balance", wallet.balance) // optimistic concurrency: only update if balance unchanged
+    .eq("balance", wallet.balance)
     .select("id");
 
   if (deductErr || !deducted || deducted.length === 0) {
@@ -108,7 +235,9 @@ router.post("/order", requireAuth, orderLimiter, async (req, res) => {
     return;
   }
 
-  // 4. Create local order record (pending)
+  // 7. Create local order record (pending)
+  const orderPriceUsd = userChargedCurrency === "USD" ? userChargedAmount : await convertToUsd(userChargedInr);
+
   const { data: order, error: orderErr } = await supabaseAdmin
     .from("orders")
     .insert({
@@ -118,9 +247,12 @@ router.post("/order", requireAuth, orderLimiter, async (req, res) => {
       platform,
       link,
       quantity,
-      price: priceUsd,
-      currency: "USD",
-      price_usd: priceUsd,
+      price: chargeInWalletCurrency,
+      currency: userChargedCurrency,
+      price_usd: orderPriceUsd,
+      sell_rate_inr: sellRateInr,
+      provider_cost_inr: providerCostInr,
+      user_charged_inr: userChargedInr,
       status: "pending",
     })
     .select()
@@ -137,24 +269,24 @@ router.post("/order", requireAuth, orderLimiter, async (req, res) => {
     return;
   }
 
-  // 5. Record debit transaction
+  // 8. Record debit transaction
   await supabaseAdmin.from("wallet_transactions").insert({
     wallet_id: wallet.id,
     user_id: userId,
     type: "purchase",
-    amount: priceUsd,
+    amount: chargeInWalletCurrency,
     description: `Order: ${serviceName}`,
     reference_id: order.id,
     balance_after: newBalance,
   });
 
-  // 6. Submit to WorldOfSMM
+  // 9. Submit to WorldOfSMM
   let externalOrderId: string | null = null;
   try {
     const providerOrder = await submitOrder({ service: serviceId, link, quantity });
     externalOrderId = String(providerOrder.order);
 
-    // 7. Update order with provider ID and processing status
+    // 10. Update order with provider ID and processing status
     await supabaseAdmin
       .from("orders")
       .update({
@@ -164,11 +296,28 @@ router.post("/order", requireAuth, orderLimiter, async (req, res) => {
       })
       .eq("id", order.id);
 
-    logger.info({ orderId: order.id, externalOrderId }, "Order submitted successfully");
-    res.status(201).json({ success: true, orderId: order.id, externalOrderId });
+    // 11. Create margin ledger entry
+    await supabaseAdmin.from("margin_ledger").insert({
+      order_id: order.id,
+      user_id: userId,
+      user_charged_amount: userChargedAmount,
+      user_charged_currency: userChargedCurrency,
+      user_charged_inr_equivalent: userChargedInr,
+      provider_cost_inr: providerCostInr,
+      markup_percent_applied: markupPercent,
+    });
+
+    logger.info({ orderId: order.id, externalOrderId, userChargedInr, providerCostInr }, "Order submitted successfully");
+    res.status(201).json({
+      success: true,
+      orderId: order.id,
+      externalOrderId,
+      charged: userChargedAmount,
+      currency: userChargedCurrency,
+    });
   } catch (err) {
-    // 8. Provider failed — refund user
-    const refundBalance = newBalance + priceUsd;
+    // 12. Provider failed — refund user
+    const refundBalance = wallet.balance; // original balance
     await supabaseAdmin
       .from("wallets")
       .update({ balance: refundBalance, updated_at: new Date().toISOString() })
@@ -178,7 +327,7 @@ router.post("/order", requireAuth, orderLimiter, async (req, res) => {
       wallet_id: wallet.id,
       user_id: userId,
       type: "refund",
-      amount: priceUsd,
+      amount: chargeInWalletCurrency,
       description: `Refund: provider rejected order`,
       reference_id: order.id,
       balance_after: refundBalance,

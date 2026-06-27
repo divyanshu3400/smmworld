@@ -38,6 +38,7 @@ type OrderRow = {
   price_usd: number;
   quantity: number;
   service_name: string;
+  user_charged_inr: number | null;
 };
 
 type NotificationType = "info" | "warning" | "success" | "error";
@@ -95,8 +96,20 @@ async function issuePartialRefund(order: OrderRow, remainsStr: string) {
     balance_after: newBalance,
   });
 
+  // Update margin ledger with refund adjustment
+  const refundInr = order.user_charged_inr ? order.user_charged_inr * refundFraction : null;
+  if (refundInr) {
+    await supabaseAdmin
+      .from("margin_ledger")
+      .update({
+        refund_adjustment_inr: refundInr,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("order_id", order.id);
+  }
+
   logger.info(
-    { orderId: order.id, remains, refundUSD: refundUSD.toFixed(6) },
+    { orderId: order.id, remains, refundUSD: refundUSD.toFixed(6), refundInr },
     "Partial refund issued"
   );
 }
@@ -141,6 +154,17 @@ async function issueFullRefund(order: OrderRow) {
     reference_id: order.id,
     balance_after: newBalance,
   });
+
+  // Update margin ledger: full refund means refund_adjustment = user_charged_inr
+  if (order.user_charged_inr) {
+    await supabaseAdmin
+      .from("margin_ledger")
+      .update({
+        refund_adjustment_inr: order.user_charged_inr,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("order_id", order.id);
+  }
 
   logger.info({ orderId: order.id, refundUSD: order.price_usd }, "Full refund issued");
 }
@@ -248,7 +272,7 @@ async function runSyncJob() {
   try {
     const { data: orders, error } = await supabaseAdmin
       .from("orders")
-      .select("id, user_id, external_order_id, status, price_usd, quantity, service_name")
+      .select("id, user_id, external_order_id, status, price_usd, quantity, service_name, user_charged_inr")
       .in("status", ACTIVE_STATUSES)
       .not("external_order_id", "is", null)
       .order("updated_at", { ascending: true })
