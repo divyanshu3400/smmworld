@@ -43,11 +43,15 @@ import { supabase } from '@/lib/supabase'
 
 declare global {
   interface Window {
-    Razorpay: new (options: RazorpayOptions) => { open: () => void }
-    Cashfree?: new (options: CashfreeOptions) => { redirect: () => void }
+    Razorpay?: new (options: RazorpayOptions) => { open: () => void }
+    Cashfree?: (config: { mode: 'production' | 'sandbox' }) => {
+      checkout: (params: {
+        paymentSessionId: string;
+        redirectTarget?: '_self' | '_blank' | '_modal';
+      }) => Promise<void>
+    }
   }
 }
-
 interface RazorpayOptions {
   key: string
   amount: number
@@ -64,10 +68,6 @@ interface RazorpayResponse {
   razorpay_order_id: string
   razorpay_payment_id: string
   razorpay_signature: string
-}
-interface CashfreeOptions {
-  paymentSessionId: string
-  returnUrl: string
 }
 
 const PRESET_AMOUNTS = [100, 200, 500, 1000, 2000, 5000]
@@ -154,17 +154,17 @@ function loadRazorpayScript(): Promise<boolean> {
   })
 }
 
-function loadCashfreeScript(): Promise<boolean> {
+async function loadCashfreeScript(): Promise<boolean> {
+  if (window.Cashfree) return true
   return new Promise((resolve) => {
-    if (window.Cashfree) return resolve(true)
-    const s = document.createElement('script')
-    s.src = 'https://sdk.cashfree.com/js/v3/cashfree.js'
-    s.onload = () => resolve(true)
-    s.onerror = () => resolve(false)
-    document.body.appendChild(s)
+    const script = document.createElement('script')
+    // Make sure this is v3
+    script.src = 'https://sdk.cashfree.com/js/v3/cashfree.js'
+    script.onload = () => resolve(true)
+    script.onerror = () => resolve(false)
+    document.body.appendChild(script)
   })
 }
-
 type PaymentState = 'idle' | 'creating' | 'waiting' | 'verifying' | 'done' | 'failed'
 
 export default function WalletPage() {
@@ -273,22 +273,25 @@ export default function WalletPage() {
     setStatusMessage('')
 
     try {
-      const order = await createGatewayOrder(amount)
-
+      const order = await createGatewayOrder(amount);
+      console.log("Backend Order Response Summary:", order);
       if (order.provider === 'cashfree' && order.sessionId) {
-        // Cashfree SDK — opens a modal/redirect. Works on desktop + mobile.
         const loaded = await loadCashfreeScript()
         if (!loaded || !window.Cashfree) {
           throw new Error('Could not load Cashfree checkout.')
         }
-        const cf = new window.Cashfree({
-          paymentSessionId: order.sessionId,
-          returnUrl: `${window.location.origin}/wallet?order_id=${order.orderId}`,
-        })
+        // 1. Force a strict fallback check for Vite's environment variable string
+        const rawMode = import.meta.env.VITE_CASHFREE_MODE;
+        const cashfreeMode = (rawMode === 'production' ? 'production' : 'sandbox');
+        console.log("Initializing Cashfree SDK in mode:", cashfreeMode);
+        const cf = window.Cashfree({ mode: cashfreeMode })
         setActiveOrderId(order.orderId)
         setPaymentState('waiting')
         setStatusMessage('Complete the payment in the Cashfree window. Your wallet will be credited automatically once confirmed.')
-        cf.redirect()
+        cf.checkout({
+          paymentSessionId: order.sessionId,
+          redirectTarget: '_self',
+        })
       } else if (order.provider === 'payu' && order.redirectUrl && order.redirectParams) {
         // PayU — redirect via form POST. Works on desktop + mobile.
         setActiveOrderId(order.orderId)
@@ -509,13 +512,12 @@ export default function WalletPage() {
                           <TableCell>
                             <Badge
                               variant="secondary"
-                              className={`${
-                                tx.type === 'credit' || tx.type === 'bonus' || tx.type === 'refund'
-                                  ? 'bg-emerald-500/10 text-emerald-500'
-                                  : tx.type === 'debit' || tx.type === 'purchase'
+                              className={`${tx.type === 'credit' || tx.type === 'bonus' || tx.type === 'refund'
+                                ? 'bg-emerald-500/10 text-emerald-500'
+                                : tx.type === 'debit' || tx.type === 'purchase'
                                   ? 'bg-red-500/10 text-red-500'
                                   : 'bg-blue-500/10 text-blue-500'
-                              }`}
+                                }`}
                             >
                               {TRANSACTION_TYPES[tx.type]?.label || tx.type}
                             </Badge>
@@ -530,11 +532,10 @@ export default function WalletPage() {
                           </TableCell>
                           <TableCell>
                             <span
-                              className={`font-medium ${
-                                tx.type === 'credit' || tx.type === 'bonus' || tx.type === 'refund'
-                                  ? 'text-emerald-500'
-                                  : 'text-red-500'
-                              }`}
+                              className={`font-medium ${tx.type === 'credit' || tx.type === 'bonus' || tx.type === 'refund'
+                                ? 'text-emerald-500'
+                                : 'text-red-500'
+                                }`}
                             >
                               {tx.type === 'credit' || tx.type === 'bonus' || tx.type === 'refund' ? '+' : '-'}
                               {formatPrice(tx.amount)}
@@ -619,11 +620,10 @@ export default function WalletPage() {
                       key={preset}
                       type="button"
                       onClick={() => setAmountINR(String(preset))}
-                      className={`flex items-center justify-center gap-1 py-2 px-3 rounded-lg border text-sm font-medium transition-all ${
-                        amountINR === String(preset)
-                          ? 'border-emerald-500 bg-emerald-500/10 text-emerald-500'
-                          : 'border-border hover:border-emerald-500/50 text-foreground'
-                      }`}
+                      className={`flex items-center justify-center gap-1 py-2 px-3 rounded-lg border text-sm font-medium transition-all ${amountINR === String(preset)
+                        ? 'border-emerald-500 bg-emerald-500/10 text-emerald-500'
+                        : 'border-border hover:border-emerald-500/50 text-foreground'
+                        }`}
                     >
                       <IndianRupee className="h-3 w-3" />
                       {preset.toLocaleString('en-IN')}

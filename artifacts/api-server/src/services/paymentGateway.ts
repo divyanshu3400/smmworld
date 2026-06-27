@@ -114,6 +114,7 @@ async function cashfreeCreateOrder(
     provider: "cashfree",
     providerOrderId: body.order_id || input.orderId,
     sessionId: body.payment_session_id,
+    redirectUrl: `${process.env.FRONTEND_URL || ""}/wallet?order_id=${input.orderId}`
   };
 }
 
@@ -178,11 +179,7 @@ function payuCreds() {
   return { key, salt };
 }
 
-function payuHash(
-  key: string,
-  salt: string,
-  parts: string[]
-): string {
+function payuHash(key: string, salt: string, parts: string[]): string {
   return crypto
     .createHash("sha512")
     .update(parts.join("|"))
@@ -287,6 +284,8 @@ export async function createOrder(
   input: CreateOrderInput
 ): Promise<CreateOrderResult> {
   switch (provider) {
+    case "razorpay":
+      return razorpayCreateOrder(input);
     case "cashfree":
       return cashfreeCreateOrder(input);
     case "payu":
@@ -295,7 +294,35 @@ export async function createOrder(
       throw new Error(`Provider ${provider} not supported here`);
   }
 }
+async function razorpayCreateOrder(
+  input: CreateOrderInput
+): Promise<CreateOrderResult> {
+  const keyId = process.env.RAZORPAY_KEY_ID!;
+  const keySecret = process.env.RAZORPAY_KEY_SECRET!;
 
+  const res = await fetch("https://api.razorpay.com/v1/orders", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString("base64")}`,
+    },
+    body: JSON.stringify({
+      amount: Math.round(input.amountINR * 100), // paise
+      currency: "INR",
+      receipt: input.orderId,
+    }),
+  });
+
+  const body = (await res.json()) as { id?: string; error?: { description: string } };
+  if (!res.ok) {
+    throw new Error(`Razorpay create-order failed: ${body.error?.description || res.statusText}`);
+  }
+
+  return {
+    provider: "razorpay",
+    providerOrderId: body.id!,
+  };
+}
 export async function fetchPaymentStatus(
   provider: ProviderKey,
   providerOrderId: string
