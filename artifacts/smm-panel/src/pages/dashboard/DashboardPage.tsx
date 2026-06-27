@@ -6,7 +6,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { getDashboardStats, getBalanceHistory, getMonthlySpending } from '@/services/dashboard.service'
 import { getRecentTransactions } from '@/services/wallet.service'
 import { getActiveAnnouncements } from '@/services/announcement.service'
-import { formatCurrency, formatDate, formatRelativeTime } from '@/lib/formatters'
+import { formatDate, formatRelativeTime } from '@/lib/formatters'
 import { useCurrency } from '@/contexts/CurrencyContext'
 import { getCurrencySymbol, type CurrencyCode } from '@/lib/currency'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -42,7 +42,7 @@ const announcementTypeConfig = {
 
 export default function DashboardPage() {
   const { user, profile } = useAuth()
-  const { currency } = useCurrency()
+  const { currency, formatWalletAmount } = useCurrency()
   const currencySymbol = getCurrencySymbol(currency as CurrencyCode)
   const firstName = profile?.first_name || 'User'
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(() => {
@@ -98,7 +98,7 @@ export default function DashboardPage() {
       value: stats?.walletBalance || 0,
       icon: Wallet,
       color: 'emerald',
-      format: (v: number) => formatCurrency(v, currency),
+      format: (v: number) => formatWalletAmount(v),
       href: ROUTES.WALLET,
     },
     {
@@ -249,7 +249,7 @@ export default function DashboardPage() {
                         border: '1px solid hsl(var(--border))',
                         borderRadius: '8px',
                       }}
-                      formatter={(value: number) => [formatCurrency(value, currency), 'Balance']}
+                      formatter={(value: number) => [formatWalletAmount(value), 'Balance']}
                       labelFormatter={(label) => formatDate(label, 'MMM d, yyyy')}
                     />
                     <Area
@@ -344,7 +344,7 @@ export default function DashboardPage() {
                           : 'text-red-500'
                       }`}>
                         {tx.type === 'credit' || tx.type === 'bonus' || tx.type === 'refund' ? '+' : '-'}
-                        {formatCurrency(tx.amount, currency)}
+                        {formatWalletAmount(tx.amount)}
                       </span>
                     </div>
                   ))}
@@ -386,7 +386,7 @@ export default function DashboardPage() {
                         border: '1px solid hsl(var(--border))',
                         borderRadius: '8px',
                       }}
-                      formatter={(value: number) => [formatCurrency(value, currency), 'Spent']}
+                      formatter={(value: number) => [formatWalletAmount(value), 'Spent']}
                     />
                     <Bar
                       dataKey="value"

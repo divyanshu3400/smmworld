@@ -171,7 +171,7 @@ type PaymentState = 'idle' | 'creating' | 'waiting' | 'verifying' | 'done' | 'fa
 export default function WalletPage() {
   const { user } = useAuth()
   const queryClient = useQueryClient()
-  const { formatPrice, currency } = useCurrency()
+  const { formatWalletAmount, currency } = useCurrency()
   const currencySymbol = getCurrencySymbol(currency as CurrencyCode)
   const [page, setPage] = useState(1)
   const [type, setType] = useState<string>('all')
@@ -384,7 +384,7 @@ export default function WalletPage() {
   const statCards = [
     {
       title: 'Total Credits',
-      value: formatPrice(
+      value: formatWalletAmount(
         transactions?.data
           .filter((t) => ['credit', 'bonus', 'refund'].includes(t.type))
           .reduce((s, t) => s + t.amount, 0) || 0
@@ -394,7 +394,7 @@ export default function WalletPage() {
     },
     {
       title: 'Total Debits',
-      value: formatPrice(
+      value: formatWalletAmount(
         transactions?.data
           .filter((t) => ['debit', 'purchase'].includes(t.type))
           .reduce((s, t) => s + t.amount, 0) || 0
@@ -443,7 +443,7 @@ export default function WalletPage() {
                   <Skeleton className="h-12 w-32 bg-white/20" />
                 ) : (
                   <h2 className="text-4xl font-bold mt-1">
-                    {formatPrice(wallet?.balance || 0)}
+                    {formatWalletAmount(wallet?.balance || 0)}
                   </h2>
                 )}
                 <p className="text-white/70 text-sm mt-2">{currency} Wallet</p>
@@ -569,10 +569,10 @@ export default function WalletPage() {
                                 }`}
                             >
                               {tx.type === 'credit' || tx.type === 'bonus' || tx.type === 'refund' ? '+' : '-'}
-                              {formatPrice(tx.amount)}
+                              {formatWalletAmount(tx.amount)}
                             </span>
                           </TableCell>
-                          <TableCell>{formatPrice(tx.balance_after)}</TableCell>
+                          <TableCell>{formatWalletAmount(tx.balance_after)}</TableCell>
                           <TableCell className="text-right text-muted-foreground">
                             {formatRelativeTime(tx.created_at)}
                           </TableCell>

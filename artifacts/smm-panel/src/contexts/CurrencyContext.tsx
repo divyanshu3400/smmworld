@@ -20,7 +20,10 @@ const FALLBACK_RATES: Record<string, number> = {
 interface CurrencyContextValue {
   currency: CurrencyCode
   rates: Record<string, number>
+  /** Format a USD-denominated amount in the user's wallet currency (applies FX). */
   formatPrice: (usdAmount: number, decimals?: number) => string
+  /** Format an amount already in the wallet's currency — NO FX conversion. */
+  formatWalletAmount: (amount: number, decimals?: number) => string
   convertFromUSD: (usdAmount: number) => number
   isLoading: boolean
 }
@@ -29,6 +32,7 @@ const CurrencyContext = createContext<CurrencyContextValue>({
   currency: 'USD',
   rates: FALLBACK_RATES,
   formatPrice: (v) => `$${v.toFixed(2)}`,
+  formatWalletAmount: (v) => `$${v.toFixed(2)}`,
   convertFromUSD: (v) => v,
   isLoading: false,
 })
@@ -83,10 +87,21 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
     return formatCurrencyByCode(converted, currency)
   }
 
+  // Formats an amount that is already stored in the wallet's currency.
+  // Does NOT apply any FX conversion — use this for wallet balances and
+  // wallet transaction amounts, which are now stored in the locked currency.
+  const formatWalletAmount = (amount: number, decimals?: number): string => {
+    if (decimals !== undefined) {
+      return `${getSymbol(currency)}${amount.toFixed(decimals)}`
+    }
+    return formatCurrencyByCode(amount, currency)
+  }
+
   const value: CurrencyContextValue = {
     currency,
     rates: effectiveRates,
     formatPrice,
+    formatWalletAmount,
     convertFromUSD,
     isLoading: ratesLoading,
   }

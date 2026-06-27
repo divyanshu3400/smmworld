@@ -4,13 +4,13 @@
   "license": "MIT",
   "packageManager": "pnpm@10.33.2",
   "scripts": {
-    "build": "pnpm run typecheck && pnpm -r --if-present run build",
+    "build": "npx pnpm run typecheck && npx pnpm -r --if-present run build",
     "build:libs": "tsc --build",
     "typecheck:libs": "tsc --build",
-    "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck",
-    "build:api": "pnpm --filter @workspace/api-server run build",
+    "typecheck": "npx pnpm run typecheck:libs && npx pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck",
+    "build:api": "npx pnpm --filter @workspace/api-server run build",
     "start:api": "node artifacts/api-server/dist/index.mjs",
-    "build:frontend": "pnpm --filter @workspace/smm-panel run build",
+    "build:frontend": "npx pnpm --filter @workspace/smm-panel run build",
     "start:frontend": "npx serve artifacts/smm-panel/dist/public --single -l $PORT"
   },
   "private": true,
