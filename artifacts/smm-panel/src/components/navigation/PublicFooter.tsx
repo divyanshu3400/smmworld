@@ -1,13 +1,13 @@
 import { Link } from 'react-router-dom'
-import { Zap, Twitter, Facebook, Instagram, Linkedin, Mail, Send } from 'lucide-react'
+import { Zap, Battery as Twitter, Notebook as Facebook, Drama as Instagram, Link as Linkedin, Mail, Send } from 'lucide-react'
 import { APP_NAME } from '@/lib/constants'
 
 const navigation = {
   product: [
     { name: 'Services', href: '/services' },
-    { name: 'Pricing', href: '/#services' },
-    { name: 'API', href: '/api-docs' },
-    { name: 'FAQ', href: '/#faq' },
+    { name: 'Pricing', href: '/pricing' },
+    { name: 'API Docs', href: '/api-docs' },
+    { name: 'FAQ', href: '/faq' },
   ],
   company: [
     { name: 'About', href: '/about' },
@@ -15,8 +15,8 @@ const navigation = {
     { name: 'Contact', href: '/contact' },
   ],
   legal: [
-    { name: 'Privacy', href: '/privacy' },
-    { name: 'Terms', href: '/terms' },
+    { name: 'Privacy Policy', href: '/privacy' },
+    { name: 'Terms of Service', href: '/terms' },
     { name: 'Refund Policy', href: '/refund-policy' },
   ],
 }

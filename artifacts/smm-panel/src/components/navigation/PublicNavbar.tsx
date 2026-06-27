@@ -8,8 +8,11 @@ import { useTheme } from '@/contexts/ThemeContext'
 const navigation = [
   { name: 'Home', href: '/' },
   { name: 'Services', href: '/services' },
+  { name: 'Pricing', href: '/pricing' },
   { name: 'API', href: '/api-docs' },
-  { name: 'FAQ', href: '/#faq' },
+  { name: 'About', href: '/about' },
+  { name: 'Blog', href: '/blog' },
+  { name: 'FAQ', href: '/faq' },
 ]
 
 export default function PublicNavbar() {
@@ -106,12 +109,23 @@ export default function PublicNavbar() {
                   <Link
                     key={item.name}
                     to={item.href}
-                    className="block px-3 py-2.5 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors"
+                    className={`block px-3 py-2.5 text-sm font-medium rounded-lg transition-colors ${
+                      location.pathname === item.href
+                        ? 'text-emerald-500 bg-emerald-500/10'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                    }`}
                     onClick={() => setMobileMenuOpen(false)}
                   >
                     {item.name}
                   </Link>
                 ))}
+                <Link
+                  to="/contact"
+                  className="block px-3 py-2.5 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors"
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  Contact
+                </Link>
                 <div className="pt-3 space-y-2 border-t border-border mt-3">
                   <Link
                     to="/login"

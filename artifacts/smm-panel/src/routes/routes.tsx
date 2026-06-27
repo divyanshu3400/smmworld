@@ -11,6 +11,16 @@ import DashboardLayout from '@/components/layouts/DashboardLayout'
 const HomePage = lazy(() => import('@/pages/public/HomePage'))
 const ServicesPage = lazy(() => import('@/pages/public/ServicesPage'))
 const ApiDocsPage = lazy(() => import('@/pages/public/ApiDocsPage'))
+const AboutPage = lazy(() => import('@/pages/public/AboutPage'))
+const BlogPage = lazy(() => import('@/pages/public/BlogPage'))
+const ContactPage = lazy(() => import('@/pages/public/ContactPage'))
+const PrivacyPolicyPage = lazy(() => import('@/pages/public/PrivacyPolicyPage'))
+const TermsOfServicePage = lazy(() => import('@/pages/public/TermsOfServicePage'))
+const RefundPolicyPage = lazy(() => import('@/pages/public/RefundPolicyPage'))
+const FAQPage = lazy(() => import('@/pages/public/FAQPage'))
+const PricingPage = lazy(() => import('@/pages/public/PricingPage'))
+const ComingSoonPage = lazy(() => import('@/pages/public/ComingSoonPage'))
+const NotFoundPage = lazy(() => import('@/pages/public/NotFoundPage'))
 
 // Auth pages
 const LoginPage = lazy(() => import('@/pages/auth/LoginPage'))
@@ -53,6 +63,16 @@ export const router = createBrowserRouter([
       { path: '/', element: withSuspense(HomePage) },
       { path: 'services', element: withSuspense(ServicesPage) },
       { path: 'api-docs', element: withSuspense(ApiDocsPage) },
+      { path: 'about', element: withSuspense(AboutPage) },
+      { path: 'blog', element: withSuspense(BlogPage) },
+      { path: 'contact', element: withSuspense(ContactPage) },
+      { path: 'privacy', element: withSuspense(PrivacyPolicyPage) },
+      { path: 'terms', element: withSuspense(TermsOfServicePage) },
+      { path: 'refund-policy', element: withSuspense(RefundPolicyPage) },
+      { path: 'faq', element: withSuspense(FAQPage) },
+      { path: 'pricing', element: withSuspense(PricingPage) },
+      { path: 'coming-soon', element: withSuspense(ComingSoonPage) },
+      { path: '404', element: withSuspense(NotFoundPage) },
     ],
   },
   { path: 'auth/callback', element: withSuspense(AuthCallbackPage) },
@@ -91,4 +111,5 @@ export const router = createBrowserRouter([
       { path: 'admin/announcements', element: withSuspense(AdminAnnouncementsPage) },
     ],
   },
+  { path: '*', element: withSuspense(NotFoundPage) },
 ])
