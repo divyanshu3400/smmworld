@@ -2,7 +2,6 @@ import { useNavigate } from 'react-router-dom'
 import {
   Bell,
   Search,
-  Menu,
   LogOut,
   User,
   Settings,
