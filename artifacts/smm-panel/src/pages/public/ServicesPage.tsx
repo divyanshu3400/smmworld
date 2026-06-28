@@ -357,7 +357,7 @@ export default function ServicesPage() {
             <div className="space-y-4 mb-6">
               <div className="flex items-center justify-between p-3 rounded-xl bg-background/50 border border-border">
                 <span className="text-sm text-muted-foreground">Price per 1000</span>
-                <span className="font-bold text-foreground">{formatPrice(parseFloat(selectedService.rate), 4)}</span>
+                <span className="font-bold text-foreground">{selectedService.rate} INR</span>
               </div>
               <div className="flex items-center justify-between p-3 rounded-xl bg-background/50 border border-border">
                 <span className="text-sm text-muted-foreground">Minimum Order</span>
