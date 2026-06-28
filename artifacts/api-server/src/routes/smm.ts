@@ -31,6 +31,8 @@ const generalLimiter = rateLimit({
 });
 
 // ── GET /api/smm/services ────────────────────────────────────────────────────
+// Returns services from cache with sell_rate_inr (price per 1000 units in INR)
+// Formula: sellRateInr = providerRateUsd × usdToInr × (1 + markup/100) × (1 + cashfreeFee/100)
 router.get("/services", generalLimiter, async (req, res) => {
   try {
     const { category, search } = req.query;
@@ -68,8 +70,7 @@ router.get("/services", generalLimiter, async (req, res) => {
     const cashfreeFeePercent = Number(settingsResult.data?.cashfree_fee_percent ?? 2);
     const markup = markupPercent / 100;
     const cashfreeFee = cashfreeFeePercent / 100;
-    const multiplier = (1 + markup) * (1 + cashfreeFee);
-    const usdToInr = Number(rateResult.data?.rate ?? 93.4);
+    const usdToInr = Number(rateResult.data?.rate ?? 84);
 
     let rows = servicesResult.data ?? [];
 
@@ -82,18 +83,33 @@ router.get("/services", generalLimiter, async (req, res) => {
       );
     }
 
-    const services = rows.map((s) => ({
-      service: s.service_id,
-      name: s.name,
-      type: s.type,
-      category: s.category,
-      description: s.description,
-      min: s.min,
-      max: s.max,
-      rate: Number((Number(s.provider_rate) * usdToInr * multiplier).toFixed(4)),
-    }));
+    // EXACT same formula as calculatePricing:
+    // sellRateInr = providerRateUsd × usdToInr × (1 + markup) × (1 + cashfreeFee)
+    const multiplier = (1 + markup) * (1 + cashfreeFee);
 
-    return res.json({ services });
+    const services = rows.map((s) => {
+      const providerRateUsd = Number(s.provider_rate) || 0;
+      const sellRateInr = providerRateUsd * usdToInr * multiplier;
+
+      return {
+        service: s.service_id,
+        name: s.name,
+        type: s.type,
+        category: s.category,
+        description: s.description,
+        min: s.min,
+        max: s.max,
+        rate: Number(sellRateInr.toFixed(4)), // INR per 1000 units
+        provider_rate: providerRateUsd, // USD per 1000 units (for reference)
+      };
+    });
+
+    return res.json({
+      services,
+      markup_percent: markupPercent,
+      cashfree_fee_percent: cashfreeFeePercent,
+      usd_to_inr: usdToInr,
+    });
   } catch (err) {
     logger.error({ err }, "Failed to fetch SMM services");
     return res.status(502).json({ error: "Failed to fetch services" });
@@ -229,7 +245,6 @@ router.post("/order", requireAuth, orderLimiter, async (req, res) => {
     providerRateUsd,
     quantity,
     wallet.currency ?? "INR",
-    platform
   );
   // 4. Check balance
   if (wallet.balance < pricing.userChargedAmount) {
@@ -272,13 +287,12 @@ router.post("/order", requireAuth, orderLimiter, async (req, res) => {
 
   const newBalance = wallet.balance - pricing.userChargedAmount;
 
-  // 7. Create order record — store both service IDs for audit
+  // 7. Create order record
   const { data: order, error: orderErr } = await supabaseAdmin
     .from("orders")
     .insert({
       user_id: userId,
-      service_id: String(serviceId),                    // what user selected
-      fulfilment_service_id: String(fulfilmentServiceId), // what we actually submit
+      service_id: String(serviceId),
       service_name: serviceName,
       platform,
       link,
@@ -343,14 +357,7 @@ router.post("/order", requireAuth, orderLimiter, async (req, res) => {
         user_charged_inr_equivalent: pricing.userChargedInr,
         provider_cost_inr: pricing.providerCostInr,
         margin_inr: pricing.marginInr,
-        cashfree_fee_inr: pricing.cashfreeFeeInr,
         markup_percent_applied: pricing.markupPercent,
-        cashfree_fee_percent_applied: pricing.cashfreeFeePercent,
-        usd_to_inr_rate: pricing.usdToInr,
-        selected_service_id: String(serviceId),
-        platform_multiplier: pricing.platformMultiplier,      // ← add
-        fulfilment_quantity: pricing.fulfilmentQuantity,
-        fulfilment_service_id: String(fulfilmentServiceId),
       }),
     ]);
 
