@@ -160,11 +160,11 @@ router.post("/order", requireAuth, orderLimiter, async (req, res) => {
 
   const { serviceId, serviceName, platform, link, quantity } = parsed.data;
 
-  // 1. Fetch service + wallet in parallel
+  // 1. Fetch selected service + wallet in parallel
   const [serviceResult, walletResult] = await Promise.all([
     supabaseAdmin
       .from("smm_services_cache")
-      .select("provider_rate, min, max")
+      .select("provider_rate, min, max, category")
       .eq("service_id", serviceId)
       .single(),
     supabaseAdmin
@@ -185,24 +185,56 @@ router.post("/order", requireAuth, orderLimiter, async (req, res) => {
   }
 
   const wallet = walletResult.data;
-  const providerRateUsd = Number(serviceResult.data.provider_rate);
+  const selectedService = serviceResult.data;
+  const providerRateUsd = Number(selectedService.provider_rate);
 
-  // Validate quantity against service limits
-  if (quantity < serviceResult.data.min || quantity > serviceResult.data.max) {
+  // Validate quantity against selected service limits
+  if (quantity < selectedService.min || quantity > selectedService.max) {
     res.status(400).json({
-      error: `Quantity must be between ${serviceResult.data.min} and ${serviceResult.data.max}`,
+      error: `Quantity must be between ${selectedService.min} and ${selectedService.max}`,
     });
     return;
   }
 
-  // 2. Calculate all pricing from single helper
+  // 2. Find cheapest service in the same category
+  //    This is the service we'll actually submit to provider
+  let fulfilmentServiceId: number = serviceId; // fallback to selected
+
+  if (selectedService.category) {
+    const { data: cheapestService } = await supabaseAdmin
+      .from("smm_services_cache")
+      .select("service_id, provider_rate, min, max")
+      .eq("category", selectedService.category)
+      .lte("min", quantity)        // must support the quantity
+      .gte("max", quantity)        // must support the quantity
+      .order("provider_rate", { ascending: true })
+      .limit(1)
+      .single();
+
+    if (cheapestService) {
+      fulfilmentServiceId = cheapestService.service_id;
+      logger.info(
+        {
+          selectedServiceId: serviceId,
+          fulfilmentServiceId: cheapestService.service_id,
+          selectedRate: providerRateUsd,
+          cheapestRate: cheapestService.provider_rate,
+          category: selectedService.category,
+        },
+        "Using cheapest service in category for fulfilment"
+      );
+    }
+  }
+
+  // 3. Calculate pricing based on selected service rate (what user sees/pays)
+  //    NOT the cheapest rate — user always pays the selected service price
   const pricing = await calculatePricing(
     providerRateUsd,
     quantity,
     wallet.currency ?? "INR"
   );
 
-  // 3. Check balance
+  // 4. Check balance
   if (wallet.balance < pricing.userChargedAmount) {
     res.status(400).json({
       error: "Insufficient wallet balance",
@@ -213,7 +245,7 @@ router.post("/order", requireAuth, orderLimiter, async (req, res) => {
     return;
   }
 
-  // 4. Check provider balance (non-blocking)
+  // 5. Check provider balance (non-blocking)
   try {
     const providerBalance = await fetchBalance();
     if (parseFloat(providerBalance.balance) < pricing.providerCostUsd * 0.9) {
@@ -226,7 +258,7 @@ router.post("/order", requireAuth, orderLimiter, async (req, res) => {
     logger.warn({ err }, "Could not check provider balance, continuing");
   }
 
-  // 5. Atomic balance deduction
+  // 6. Atomic balance deduction
   const { data: deductResult, error: deductErr } = await supabaseAdmin.rpc(
     "deduct_wallet_balance",
     {
@@ -243,12 +275,13 @@ router.post("/order", requireAuth, orderLimiter, async (req, res) => {
 
   const newBalance = wallet.balance - pricing.userChargedAmount;
 
-  // 6. Create order record
+  // 7. Create order record — store both service IDs for audit
   const { data: order, error: orderErr } = await supabaseAdmin
     .from("orders")
     .insert({
       user_id: userId,
-      service_id: String(serviceId),
+      service_id: String(serviceId),                    // what user selected
+      fulfilment_service_id: String(fulfilmentServiceId), // what we actually submit
       service_name: serviceName,
       platform,
       link,
@@ -274,7 +307,7 @@ router.post("/order", requireAuth, orderLimiter, async (req, res) => {
     return;
   }
 
-  // 7. Record debit transaction
+  // 8. Record debit transaction
   await supabaseAdmin.from("wallet_transactions").insert({
     wallet_id: wallet.id,
     user_id: userId,
@@ -285,11 +318,14 @@ router.post("/order", requireAuth, orderLimiter, async (req, res) => {
     balance_after: newBalance,
   });
 
-  // 8. Submit to provider
+  // 9. Submit to provider using cheapest fulfilment service
   try {
-    // const providerOrder = await submitOrder({ service: serviceId, link, quantity });
-    // const externalOrderId = String(providerOrder.order);
-    const externalOrderId = "test_kgnshdsunhds";
+    const providerOrder = await submitOrder({
+      service: fulfilmentServiceId,  // ← cheapest in category
+      link,
+      quantity,
+    });
+    const externalOrderId = String(providerOrder.order);
 
     await Promise.all([
       supabaseAdmin
@@ -313,6 +349,8 @@ router.post("/order", requireAuth, orderLimiter, async (req, res) => {
         markup_percent_applied: pricing.markupPercent,
         cashfree_fee_percent_applied: pricing.cashfreeFeePercent,
         usd_to_inr_rate: pricing.usdToInr,
+        selected_service_id: String(serviceId),
+        fulfilment_service_id: String(fulfilmentServiceId),
       }),
     ]);
 
@@ -320,6 +358,8 @@ router.post("/order", requireAuth, orderLimiter, async (req, res) => {
       {
         orderId: order.id,
         externalOrderId,
+        selectedServiceId: serviceId,
+        fulfilmentServiceId,
         userChargedInr: pricing.userChargedInr,
         providerCostInr: pricing.providerCostInr,
         marginInr: pricing.marginInr,
@@ -335,7 +375,6 @@ router.post("/order", requireAuth, orderLimiter, async (req, res) => {
       currency: pricing.userChargedCurrency,
     });
   } catch (err) {
-    // Provider failed — refund
     await supabaseAdmin.rpc("credit_wallet_balance", {
       p_wallet_id: wallet.id,
       p_amount: pricing.userChargedAmount,
@@ -371,6 +410,7 @@ router.post("/order", requireAuth, orderLimiter, async (req, res) => {
     res.status(502).json({ error: "Provider rejected order. Your balance has been refunded." });
   }
 });
+
 // ── GET /api/smm/order/:id ───────────────────────────────────────────────────
 router.get("/order/:id", requireAuth, generalLimiter, async (req, res) => {
   const userId = req.userId!;
