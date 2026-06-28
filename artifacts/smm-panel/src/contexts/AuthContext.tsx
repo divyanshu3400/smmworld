@@ -1,17 +1,26 @@
 import {
   createContext,
-  useCallback,
+  useContext,
   useEffect,
-  useMemo,
   useState,
+  useCallback,
+  type ReactNode,
 } from 'react'
-import type { User, Session } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
-import { getProfile, signInWithEmail, signUpWithEmail, signOut as authSignOut, signInWithGoogle, resetPassword, updatePassword } from '@/services/auth.service'
+import {
+  getProfile,
+  signInWithEmail,
+  signUpWithEmail,
+  signOut as authSignOut,
+  signInWithGoogle,
+  resetPassword,
+  updatePassword,
+} from '@/services/auth.service'
 import { getAuthenticatorAssuranceLevel } from '@/services/mfa.service'
+import { handleSupabaseError } from '@/lib/error-handler'
+import type { User, Session } from '@supabase/supabase-js'
 import type { Profile } from '@/types/database'
 import type { LoginCredentials, SignupCredentials } from '@/types/auth'
-import { handleSupabaseError } from '@/lib/error-handler'
 
 interface AuthContextValue {
   user: User | null
@@ -31,13 +40,9 @@ interface AuthContextValue {
   clearError: () => void
 }
 
-export const AuthContext = createContext<AuthContextValue | null>(null)
+const AuthContext = createContext<AuthContextValue | null>(null)
 
-interface AuthProviderProps {
-  children: React.ReactNode
-}
-
-export function AuthProvider({ children }: AuthProviderProps) {
+export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [session, setSession] = useState<Session | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
@@ -88,24 +93,24 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     initializeAuth()
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, newSession) => {
-        if (!mounted) return
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (event, newSession) => {
+      if (!mounted) return
 
-        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-          setSession(newSession)
-          setUser(newSession?.user ?? null)
-          if (newSession?.user) {
-            const profileData = await getProfile(newSession.user.id)
-            setProfile(profileData)
-          }
-        } else if (event === 'SIGNED_OUT') {
-          setSession(null)
-          setUser(null)
-          setProfile(null)
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        setSession(newSession)
+        setUser(newSession?.user ?? null)
+        if (newSession?.user) {
+          const profileData = await getProfile(newSession.user.id)
+          setProfile(profileData)
         }
+      } else if (event === 'SIGNED_OUT') {
+        setSession(null)
+        setUser(null)
+        setProfile(null)
       }
-    )
+    })
 
     return () => {
       mounted = false
@@ -207,42 +212,37 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   }, [])
 
-  const value = useMemo(
-    () => ({
-      user,
-      session,
-      profile,
-      loading,
-      initialized,
-      error,
-      needsMfa,
-      login,
-      signup,
-      loginWithGoogle,
-      logout,
-      requestPasswordReset,
-      updatePassword: handleUpdatePassword,
-      refreshProfile,
-      clearError,
-    }),
-    [
-      user,
-      session,
-      profile,
-      loading,
-      initialized,
-      error,
-      needsMfa,
-      login,
-      signup,
-      loginWithGoogle,
-      logout,
-      requestPasswordReset,
-      handleUpdatePassword,
-      refreshProfile,
-      clearError,
-    ]
+  return (
+    <AuthContext.Provider
+      value={{
+        user,
+        session,
+        profile,
+        loading,
+        initialized,
+        error,
+        needsMfa,
+        login,
+        signup,
+        loginWithGoogle,
+        logout,
+        requestPasswordReset,
+        updatePassword: handleUpdatePassword,
+        refreshProfile,
+        clearError,
+      }}
+    >
+      {children}
+    </AuthContext.Provider>
   )
-
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
+
+export function useAuthContext() {
+  const context = useContext(AuthContext)
+  if (!context) {
+    throw new Error('useAuthContext must be used within an AuthProvider')
+  }
+  return context
+}
+
+export { AuthContext }

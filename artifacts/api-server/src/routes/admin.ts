@@ -634,10 +634,10 @@ router.post("/sync-services", requireAdmin, async (req, res) => {
     }
 
     logger.info({ count: result.count, adminId: req.userId }, "Services synced to cache");
-    res.json({ success: true, count: result.count });
+    return res.json({ success: true, count: result.count });
   } catch (err) {
     logger.error({ err }, "Failed to sync services");
-    res.status(500).json({ error: "Failed to sync services" });
+    return res.status(500).json({ error: "Failed to sync services" });
   }
 });
 
@@ -682,7 +682,7 @@ router.get("/services-cached", requireAdmin, async (req, res) => {
     sell_rate_inr: s.provider_rate_inr ? Number(s.provider_rate_inr) * (1 + markupPercent / 100) : null,
   }));
 
-  res.json({ services: enriched, total: count || 0, page, limit, markup_percent: markupPercent });
+  return res.json({ services: enriched, total: count || 0, page, limit, markup_percent: markupPercent });
 });
 
 // ── GET /api/admin/service-categories ─────────────────────────────────────────
@@ -697,7 +697,7 @@ router.get("/service-categories", requireAdmin, async (req, res) => {
   }
 
   const categories = [...new Set((data || []).map((r) => r.category).filter(Boolean))];
-  res.json({ categories: categories.sort() });
+  return res.json({ categories: categories.sort() });
 });
 
 export default router;

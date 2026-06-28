@@ -65,10 +65,10 @@ router.get("/services", generalLimiter, async (req, res) => {
       max: s.max,
     }));
 
-    res.json({ services, markup_percent: markupPercent });
+    return res.json({ services, markup_percent: markupPercent });
   } catch (err) {
     logger.error({ err }, "Failed to fetch SMM services");
-    res.status(502).json({ error: "Failed to fetch services" });
+    return res.status(502).json({ error: "Failed to fetch services" });
   }
 });
 

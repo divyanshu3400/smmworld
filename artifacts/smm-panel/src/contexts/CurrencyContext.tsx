@@ -1,126 +1,130 @@
-import { createContext, useContext, useEffect, useMemo } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { useAuth } from '@/hooks/useAuth'
-import { getWallet } from '@/services/wallet.service'
-import { getExchangeRates } from '@/services/exchange-rate.service'
-import { formatCurrencyByCode, type CurrencyCode } from '@/lib/currency'
-
-const FALLBACK_RATES: Record<string, number> = {
-  USD: 1,
-  EUR: 0.92,
-  GBP: 0.79,
-  INR: 83.5,
-  BRL: 4.97,
-  PHP: 56.45,
-  IDR: 15750,
-  NGN: 1550,
-  TRY: 32.5,
-}
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  useCallback,
+  type ReactNode,
+} from 'react'
+import {
+  getExchangeRates,
+  convertCurrencySync,
+} from '@/services/exchange-rate.service'
+import {
+  formatCurrencyByCode,
+  type CurrencyCode,
+} from '@/lib/currency'
 
 interface CurrencyContextValue {
   currency: CurrencyCode
+  setCurrency: (currency: CurrencyCode) => void
   rates: Record<string, number>
-  /** Format a USD-denominated amount in the user's wallet currency (applies FX). */
-  formatPrice: (usdAmount: number, decimals?: number) => string
-  /** Format an amount already in the wallet's currency — NO FX conversion. */
-  formatWalletAmount: (amount: number, decimals?: number) => string
-  convertFromUSD: (usdAmount: number) => number
-  isLoading: boolean
+  loading: boolean
+  formatPrice: (amountInUSD: number, decimals?: number) => string
+  formatWalletAmount: (amount: number) => string
+  convertFromUSD: (amountInUSD: number) => number
+  convertToUSD: (amount: number) => number
 }
 
-const CurrencyContext = createContext<CurrencyContextValue>({
-  currency: 'USD',
-  rates: FALLBACK_RATES,
-  formatPrice: (v) => `$${v.toFixed(2)}`,
-  formatWalletAmount: (v) => `$${v.toFixed(2)}`,
-  convertFromUSD: (v) => v,
-  isLoading: false,
-})
+const CurrencyContext = createContext<CurrencyContextValue | null>(null)
 
-export function CurrencyProvider({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth()
+const STORAGE_KEY = 'smmhub_currency'
 
-  // Fetch the wallet — its locked `currency` field is the single source of truth.
-  // Uses the same query key as the wallet page so the navbar and wallet page
-  // share the same React Query cache entry. After a top-up, invalidating
-  // ['wallet'] updates both views simultaneously.
-  const { data: wallet } = useQuery({
-    queryKey: ['wallet'],
-    queryFn: () => getWallet(user!.id),
-    enabled: !!user?.id,
-    staleTime: 30 * 1000,
-  })
+function getInitialCurrency(): CurrencyCode {
+  if (typeof window === 'undefined') return 'USD'
+  const stored = localStorage.getItem(STORAGE_KEY)
+  const validCodes: CurrencyCode[] = ['USD', 'EUR', 'GBP', 'INR', 'BRL', 'PHP', 'IDR', 'NGN', 'TRY']
+  if (stored && validCodes.includes(stored as CurrencyCode)) {
+    return stored as CurrencyCode
+  }
+  return 'USD'
+}
 
-  const { data: rates, isLoading: ratesLoading } = useQuery({
-    queryKey: ['exchange-rates'],
-    queryFn: getExchangeRates,
-    staleTime: 60 * 60 * 1000,
-    placeholderData: FALLBACK_RATES,
-  })
-
-  const currency: CurrencyCode = useMemo(() => {
-    if (wallet?.currency) {
-      return wallet.currency as CurrencyCode
-    }
-    return 'USD'
-  }, [wallet?.currency])
+export function CurrencyProvider({ children }: { children: ReactNode }) {
+  const [currency, setCurrencyState] = useState<CurrencyCode>(getInitialCurrency)
+  const [rates, setRates] = useState<Record<string, number>>({ USD: 1 })
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (currency && currency !== 'USD') {
-      localStorage.setItem('smmhub_preferred_currency', currency)
+    let mounted = true
+
+    const loadRates = async () => {
+      try {
+        const fetchedRates = await getExchangeRates()
+        if (mounted) {
+          setRates(fetchedRates)
+        }
+      } catch (err) {
+        console.error('Failed to load exchange rates:', err)
+      } finally {
+        if (mounted) setLoading(false)
+      }
     }
-  }, [currency])
 
-  const effectiveRates = rates || FALLBACK_RATES
+    loadRates()
+  }, [])
 
-  const convertFromUSD = (usdAmount: number): number => {
-    if (currency === 'USD') return usdAmount
-    return usdAmount * (effectiveRates[currency] || 1)
-  }
+  const setCurrency = useCallback((c: CurrencyCode) => {
+    setCurrencyState(c)
+    localStorage.setItem(STORAGE_KEY, c)
+  }, [])
 
-  const formatPrice = (usdAmount: number, decimals?: number): string => {
-    const converted = convertFromUSD(usdAmount)
-    if (decimals !== undefined) {
-      const { symbol } = { symbol: getSymbol(currency) }
-      return `${symbol}${converted.toFixed(decimals)}`
-    }
-    return formatCurrencyByCode(converted, currency)
-  }
+  const convertFromUSD = useCallback(
+    (amountInUSD: number): number => {
+      return convertCurrencySync(amountInUSD, 'USD', currency, rates)
+    },
+    [currency, rates]
+  )
 
-  // Formats an amount that is already stored in the wallet's currency.
-  // Does NOT apply any FX conversion — use this for wallet balances and
-  // wallet transaction amounts, which are now stored in the locked currency.
-  const formatWalletAmount = (amount: number, decimals?: number): string => {
-    if (decimals !== undefined) {
-      return `${getSymbol(currency)}${amount.toFixed(decimals)}`
-    }
-    return formatCurrencyByCode(amount, currency)
-  }
+  const convertToUSD = useCallback(
+    (amount: number): number => {
+      return convertCurrencySync(amount, currency, 'USD', rates)
+    },
+    [currency, rates]
+  )
 
-  const value: CurrencyContextValue = {
-    currency,
-    rates: effectiveRates,
-    formatPrice,
-    formatWalletAmount,
-    convertFromUSD,
-    isLoading: ratesLoading,
-  }
+  const formatPrice = useCallback(
+    (amountInUSD: number, decimals = 2): string => {
+      const converted = convertCurrencySync(amountInUSD, 'USD', currency, rates)
+      const formatted = formatCurrencyByCode(converted, currency)
+      if (decimals !== 2) {
+        const symbol = currency === 'IDR' || currency === 'INR' ? '' : ''
+        return `${symbol}${converted.toFixed(decimals)} ${currency}`
+      }
+      return formatted
+    },
+    [currency, rates]
+  )
+
+  const formatWalletAmount = useCallback(
+    (amount: number): string => {
+      return formatCurrencyByCode(amount, currency)
+    },
+    [currency]
+  )
 
   return (
-    <CurrencyContext.Provider value={value}>
+    <CurrencyContext.Provider
+      value={{
+        currency,
+        setCurrency,
+        rates,
+        loading,
+        formatPrice,
+        formatWalletAmount,
+        convertFromUSD,
+        convertToUSD,
+      }}
+    >
       {children}
     </CurrencyContext.Provider>
   )
 }
 
-function getSymbol(currency: CurrencyCode): string {
-  const symbols: Record<string, string> = {
-    USD: '$', EUR: '€', GBP: '£', INR: '₹',
-    BRL: 'R$', PHP: '₱', IDR: 'Rp', NGN: '₦', TRY: '₺',
-  }
-  return symbols[currency] || currency
-}
-
 export function useCurrency() {
-  return useContext(CurrencyContext)
+  const context = useContext(CurrencyContext)
+  if (!context) {
+    throw new Error('useCurrency must be used within a CurrencyProvider')
+  }
+  return context
 }
