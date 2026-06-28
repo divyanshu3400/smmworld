@@ -32,7 +32,7 @@ export default function HeroSection() {
       </div>
       <div className="absolute inset-0 bg-grid opacity-[0.025] dark:opacity-[0.04] pointer-events-none" />
 
-      <div className="relative w-full px-6 py-28 mx-auto max-w-7xl sm:py-36 lg:py-44">
+      <div className="relative w-full px-6 py-28 mx-auto max-w-7xl sm:py-5 lg:py-5">
         <div className="grid lg:grid-cols-2 gap-16 items-center">
 
           {/* Left column */}

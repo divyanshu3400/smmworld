@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { NavLink, useLocation } from 'react-router-dom'
+import { Link, NavLink, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { LayoutDashboard, Wallet, Receipt, Gift, Bell, User, Settings, ChevronLeft, ChevronRight, Shield, ChartBar as BarChart3, Users, Zap, Megaphone, CreditCard, Menu, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -41,12 +41,13 @@ function useIsMobile(breakpoint = 768) {
 // ─── Shared logo mark ───────────────────────────────────────────────────────
 function LogoMark() {
   return (
-    <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center shadow-md shadow-emerald-500/25 flex-shrink-0">
-      <Zap className="h-4 w-4 text-white" />
-    </div>
+    <img
+      src="/logo.png"
+      alt="Logo"
+      className="h-8 w-8 rounded-lg object-contain flex-shrink-0"
+    />
   )
 }
-
 // ─── Sidebar inner content (shared by desktop + mobile drawer) ──────────────
 function SidebarContent({
   collapsed,
@@ -128,12 +129,13 @@ function DesktopSidebar() {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -10 }}
               transition={{ duration: 0.15 }}
-              className="flex items-center gap-2.5 min-w-0"
             >
-              <LogoMark />
-              <span className="text-lg font-bold bg-gradient-to-r from-emerald-400 to-emerald-600 bg-clip-text text-transparent truncate">
-                {APP_NAME}
-              </span>
+              <Link to="/" className="flex items-center gap-2.5 min-w-0">
+                <LogoMark />
+                <span className="text-lg font-bold bg-gradient-to-r from-emerald-400 to-emerald-600 bg-clip-text text-transparent truncate">
+                  {APP_NAME}
+                </span>
+              </Link>
             </motion.div>
           ) : (
             <motion.div
@@ -143,7 +145,9 @@ function DesktopSidebar() {
               exit={{ opacity: 0 }}
               className="mx-auto"
             >
-              <LogoMark />
+              <Link to="/" className="block">
+                <LogoMark />
+              </Link>
             </motion.div>
           )}
         </AnimatePresence>

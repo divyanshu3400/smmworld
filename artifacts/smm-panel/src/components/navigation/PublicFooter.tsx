@@ -36,9 +36,11 @@ export default function PublicFooter() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
           <div className="col-span-2 md:col-span-1">
             <Link to="/" className="flex items-center gap-2 mb-4">
-              <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/25">
-                <Zap className="h-5 w-5 text-white" />
-              </div>
+              <img
+                src="/logo.png"
+                alt={APP_NAME}
+                className="h-10 w-10 rounded-lg object-contain flex-shrink-0"
+              />
               <span className="text-xl font-bold text-foreground">{APP_NAME}</span>
             </Link>
             <p className="text-sm text-muted-foreground mb-4">

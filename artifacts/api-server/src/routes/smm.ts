@@ -6,12 +6,10 @@ import { requireAdmin } from "../lib/adminAuth";
 import { supabaseAdmin } from "../lib/supabaseAdmin";
 import { logger } from "../lib/logger";
 import {
-  fetchServices,
   fetchBalance,
   submitOrder,
   fetchOrderStatus,
   cancelProviderOrder,
-  getServiceSellRate,
 } from "../services/smmService";
 import { calculatePricing } from "../lib/pricing";
 
@@ -148,7 +146,7 @@ const CreateOrderSchema = z.object({
   link: z.string().url("Invalid URL"),
   quantity: z.number().int().positive(),
 });
-
+const QUANTITY_FACTOR = 0.90
 router.post("/order", requireAuth, orderLimiter, async (req, res) => {
   const userId = req.userId!;
 
@@ -231,9 +229,9 @@ router.post("/order", requireAuth, orderLimiter, async (req, res) => {
   const pricing = await calculatePricing(
     providerRateUsd,
     quantity,
-    wallet.currency ?? "INR"
+    wallet.currency ?? "INR",
+    platform
   );
-
   // 4. Check balance
   if (wallet.balance < pricing.userChargedAmount) {
     res.status(400).json({
@@ -321,10 +319,11 @@ router.post("/order", requireAuth, orderLimiter, async (req, res) => {
   // 9. Submit to provider using cheapest fulfilment service
   try {
     const providerOrder = await submitOrder({
-      service: fulfilmentServiceId,  // ← cheapest in category
+      service: fulfilmentServiceId,
       link,
-      quantity,
+      quantity: pricing.fulfilmentQuantity,  // ← 90% of ordered quantity
     });
+
     const externalOrderId = String(providerOrder.order);
 
     await Promise.all([
@@ -350,6 +349,8 @@ router.post("/order", requireAuth, orderLimiter, async (req, res) => {
         cashfree_fee_percent_applied: pricing.cashfreeFeePercent,
         usd_to_inr_rate: pricing.usdToInr,
         selected_service_id: String(serviceId),
+        platform_multiplier: pricing.platformMultiplier,      // ← add
+        fulfilment_quantity: pricing.fulfilmentQuantity,
         fulfilment_service_id: String(fulfilmentServiceId),
       }),
     ]);

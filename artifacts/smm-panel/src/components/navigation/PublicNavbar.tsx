@@ -27,23 +27,23 @@ export default function PublicNavbar() {
         <div className="flex items-center justify-between">
           {/* Logo */}
           <Link to="/" className="flex items-center gap-2.5">
-            <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-md shadow-emerald-500/25">
-              <Zap className="h-4.5 w-4.5 text-white" strokeWidth={2.5} />
-            </div>
+            <img
+              src="/logo.png"
+              alt={APP_NAME}
+              className="h-9 w-9 rounded-lg object-contain flex-shrink-0"
+            />
             <span className="text-lg font-bold text-foreground">{APP_NAME}</span>
           </Link>
-
           {/* Desktop nav links */}
           <div className="hidden lg:flex items-center gap-7">
             {navigation.map((item) => (
               <Link
                 key={item.name}
                 to={item.href}
-                className={`text-sm font-medium transition-colors ${
-                  location.pathname === item.href
+                className={`text-sm font-medium transition-colors ${location.pathname === item.href
                     ? 'text-foreground'
                     : 'text-muted-foreground hover:text-foreground'
-                }`}
+                  }`}
               >
                 {item.name}
               </Link>
@@ -109,11 +109,10 @@ export default function PublicNavbar() {
                   <Link
                     key={item.name}
                     to={item.href}
-                    className={`block px-3 py-2.5 text-sm font-medium rounded-lg transition-colors ${
-                      location.pathname === item.href
+                    className={`block px-3 py-2.5 text-sm font-medium rounded-lg transition-colors ${location.pathname === item.href
                         ? 'text-emerald-500 bg-emerald-500/10'
                         : 'text-muted-foreground hover:text-foreground hover:bg-accent'
-                    }`}
+                      }`}
                     onClick={() => setMobileMenuOpen(false)}
                   >
                     {item.name}

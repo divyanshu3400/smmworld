@@ -1,4 +1,4 @@
-export const APP_NAME = 'SMMHub'
+export const APP_NAME = 'SSMM Online'
 
 export const ROUTES = {
   HOME: '/',
