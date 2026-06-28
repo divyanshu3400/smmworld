@@ -27,14 +27,28 @@ import { getUnreadCount } from '@/services/notification.service'
 import { getWallet } from '@/services/wallet.service'
 import { useCurrency } from '@/contexts/CurrencyContext'
 import { getCurrencySymbol, type CurrencyCode } from '@/lib/currency'
+import { getSettings } from '@/services'
+import { useEffect } from 'react'
 
 export default function TopBar() {
   const { user, profile, logout } = useAuth()
   const navigate = useNavigate()
-  const { currency } = useCurrency()
-  console.log(currency)
+  const { currency, setCurrency } = useCurrency()
+
+  const { data: settings, isLoading } = useQuery({
+    queryKey: ['settings'],
+    queryFn: () => getSettings(user!.id),
+    enabled: !!user?.id,
+  })
+
+  useEffect(() => {
+    if (settings?.preferred_currency) {
+      setCurrency(settings.preferred_currency as CurrencyCode)
+    }
+  }, [settings?.preferred_currency])
+  
   const currencySymbol = getCurrencySymbol(currency as CurrencyCode)
-  console.log(currencySymbol)
+
   const { data: unreadCount = 0 } = useQuery({
     queryKey: ['unread-count'],
     queryFn: () => getUnreadCount(user!.id),
