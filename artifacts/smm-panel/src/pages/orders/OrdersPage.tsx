@@ -1,17 +1,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
-import {
-  Package,
-  Search,
-  Filter,
-  ChevronLeft,
-  ChevronRight,
-  RefreshCw,
-  X,
-  ShoppingCart,
-  Loader2,
-} from 'lucide-react'
+import { Package, Search, ListFilter as Filter, ChevronLeft, ChevronRight, RefreshCw, X, ShoppingCart, Loader as Loader2 } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { getServices, getCategories, type SMMService } from '@/services/smm-api.service'
 import { createOrder, getUserOrders, syncOrderStatus, getOrderStats, cancelOrder } from '@/services/orders.service'
@@ -139,7 +129,7 @@ export default function OrdersPage() {
 
       const price = calculatePrice()
 
-      if (wallet && wallet.balance < price) {
+      if (wallet && Number(wallet.balance) < price) {
         throw new Error('Insufficient balance. Please add funds to your wallet.')
       }
 

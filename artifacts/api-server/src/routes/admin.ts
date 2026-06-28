@@ -298,7 +298,7 @@ router.post("/orders/:id/cancel", requireAdmin, async (req, res) => {
         .eq("user_id", order.user_id)
         .single();
       if (wallet) {
-        const newBal = wallet.balance + order.price_usd;
+        const newBal = Number(wallet.balance) + order.price_usd;
         await supabaseAdmin
           .from("wallets")
           .update({ balance: newBal, updated_at: new Date().toISOString() })

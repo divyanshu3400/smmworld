@@ -200,6 +200,7 @@ router.post("/order", requireAuth, orderLimiter, async (req, res) => {
   const wallet = walletResult.data;
   const selectedService = serviceResult.data;
   const providerRateUsd = Number(selectedService.provider_rate);
+  const walletBalance = Number(wallet.balance);
 
   // Validate quantity against selected service limits
   if (quantity < selectedService.min || quantity > selectedService.max) {
@@ -247,11 +248,11 @@ router.post("/order", requireAuth, orderLimiter, async (req, res) => {
     wallet.currency ?? "INR",
   );
   // 4. Check balance
-  if (wallet.balance < pricing.userChargedAmount) {
+  if (walletBalance < pricing.userChargedAmount) {
     res.status(400).json({
       error: "Insufficient wallet balance",
       required: Number(pricing.userChargedAmount.toFixed(2)),
-      available: Number(wallet.balance.toFixed(2)),
+      available: Number(walletBalance.toFixed(2)),
       currency: pricing.userChargedCurrency,
     });
     return;
@@ -276,7 +277,7 @@ router.post("/order", requireAuth, orderLimiter, async (req, res) => {
     {
       p_wallet_id: wallet.id,
       p_amount: pricing.userChargedAmount,
-      p_expected_balance: wallet.balance,
+      p_expected_balance: walletBalance,
     }
   );
 
@@ -285,7 +286,7 @@ router.post("/order", requireAuth, orderLimiter, async (req, res) => {
     return;
   }
 
-  const newBalance = wallet.balance - pricing.userChargedAmount;
+  const newBalance = walletBalance - pricing.userChargedAmount;
 
   // 7. Create order record
   const { data: order, error: orderErr } = await supabaseAdmin
@@ -516,7 +517,7 @@ router.post("/cancel", requireAuth, orderLimiter, async (req, res) => {
       .single();
 
     if (wallet) {
-      const refundBalance = wallet.balance + order.price_usd;
+      const refundBalance = Number(wallet.balance) + order.price_usd;
       await supabaseAdmin
         .from("wallets")
         .update({ balance: refundBalance, updated_at: new Date().toISOString() })

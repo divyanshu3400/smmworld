@@ -79,7 +79,7 @@ async function issuePartialRefund(order: OrderRow, remainsStr: string) {
 
   if (!wallet) return;
 
-  const newBalance = wallet.balance + refundUSD;
+  const newBalance = Number(wallet.balance) + refundUSD;
 
   await supabaseAdmin
     .from("wallets")
@@ -138,7 +138,7 @@ async function issueFullRefund(order: OrderRow) {
 
   if (!wallet) return;
 
-  const newBalance = wallet.balance + order.price_usd;
+  const newBalance = Number(wallet.balance) + order.price_usd;
 
   await supabaseAdmin
     .from("wallets")
