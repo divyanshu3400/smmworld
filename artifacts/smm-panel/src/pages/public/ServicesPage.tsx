@@ -270,7 +270,7 @@ export default function ServicesPage() {
                         <span>~2 min delivery</span>
                       </div>
                       <Link
-                        to="/order"
+                        to="/signup"
                         onClick={e => e.stopPropagation()}
                         className="block w-full text-center py-2 rounded-lg bg-emerald-500/10 text-emerald-500 font-medium text-sm hover:bg-emerald-500/20 transition-colors"
                       >
@@ -376,7 +376,7 @@ export default function ServicesPage() {
             </div>
 
             <Link
-              to="/order"
+              to="/signup"
               className="group flex items-center justify-center gap-2 w-full py-3 rounded-xl bg-emerald-500 text-white font-semibold hover:bg-emerald-600 hover:-translate-y-0.5 transition-all"
             >
               Sign up to order <TrendingUp className="h-4 w-4" />
