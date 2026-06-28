@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
 import {
@@ -13,7 +13,7 @@ import {
   Loader2,
 } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
-import { getServices, categorizeServices, type SMMService } from '@/services/smm-api.service'
+import { getServices, getCategories, type SMMService } from '@/services/smm-api.service'
 import { createOrder, getUserOrders, syncOrderStatus, getOrderStats, cancelOrder } from '@/services/orders.service'
 import { getWallet } from '@/services/wallet.service'
 import { formatCurrencyByCode, type CurrencyCode } from '@/lib/currency'
@@ -67,21 +67,36 @@ function Separator({ className }: { className?: string }) {
 export default function OrdersPage() {
   const { user } = useAuth()
   const queryClient = useQueryClient()
-  const [search, setSearch] = useState('')
-  const [selectedCategory, setSelectedCategory] = useState<string>('all')
   const [selectedService, setSelectedService] = useState<SMMService | null>(null)
   const [orderDialogOpen, setOrderDialogOpen] = useState(false)
   const [orderLink, setOrderLink] = useState('')
   const [orderQuantity, setOrderQuantity] = useState('')
   const [orderPage, setOrderPage] = useState(1)
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
+  const [search, setSearch] = useState<string>("");
+  const [debouncedSearch, setDebouncedSearch] = useState<string>("");
+  const { formatPrice, currency } = useCurrency()
 
-  const { formatPrice, convertFromUSD, currency } = useCurrency()
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(timer);
+  }, [search]);
 
-  const { data: services, isLoading: servicesLoading } = useQuery({
-    queryKey: ['smm-services'],
-    queryFn: getServices,
+  const { data: categories = [], isLoading: categoriesLoading } = useQuery({
+    queryKey: ["smm-categories"],
+    queryFn: getCategories,
+    staleTime: 30 * 60 * 1000,
+  });
+
+  const { data: services = [], isLoading: servicesLoading } = useQuery({
+    queryKey: ["smm-services", selectedCategory, debouncedSearch],
+    queryFn: () =>
+      getServices({
+        category: selectedCategory === "all" ? undefined : selectedCategory,
+        search: debouncedSearch || undefined,
+      }),
     staleTime: 5 * 60 * 1000,
-  })
+  });
 
   const { data: ordersData, isLoading: ordersLoading } = useQuery({
     queryKey: ['orders', orderPage],
@@ -101,31 +116,12 @@ export default function OrdersPage() {
     enabled: !!user?.id,
   })
 
-  const categorizedServices = useMemo(() => {
-    if (!services) return new Map()
-    return categorizeServices(services)
-  }, [services])
-
-  const categories = useMemo(() => Array.from(categorizedServices.keys()), [categorizedServices])
-
-  const filteredServices = useMemo(() => {
-    if (!services) return []
-    let filtered = services
-    if (selectedCategory !== 'all') filtered = categorizedServices.get(selectedCategory) || []
-    if (search) {
-      const q = search.toLowerCase()
-      filtered = filtered.filter(
-        (s) => s.name.toLowerCase().includes(q) || s.service.toString().includes(q)
-      )
-    }
-    return filtered
-  }, [services, selectedCategory, search, categorizedServices])
-
-  const calculatePriceUsd = (): number => {
-    if (!selectedService || !orderQuantity) return 0
-    const qty = parseInt(orderQuantity) || 0
-    return (parseFloat(selectedService.rate) * qty) / 1000
-  }
+  const calculatePrice = (): number => {
+    if (!selectedService || !orderQuantity) return 0;
+    const qty = Number(orderQuantity);
+    const rate = Number(selectedService.rate);
+    return Number(((rate * qty) / 1000).toFixed(4));
+  };
 
   const createOrderMutation = useMutation({
     mutationFn: async () => {
@@ -141,9 +137,9 @@ export default function OrdersPage() {
         throw new Error(`Quantity must be between ${min.toLocaleString()} and ${max.toLocaleString()}`)
       }
 
-      const priceUsd = calculatePriceUsd()
+      const price = calculatePrice()
 
-      if (wallet && wallet.balance < priceUsd) {
+      if (wallet && wallet.balance < price) {
         throw new Error('Insufficient balance. Please add funds to your wallet.')
       }
 
@@ -155,7 +151,6 @@ export default function OrdersPage() {
           platform: selectedCategory !== 'all' ? selectedCategory : 'other',
           link: orderLink,
           quantity,
-          priceUsd,
         },
         currency
       )
@@ -254,29 +249,57 @@ export default function OrdersPage() {
             <CardDescription>Select a service, enter your link, and place your order</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="flex flex-col sm:flex-row gap-4 mb-6">
-              <div className="relative flex-1">
+            <div className="flex gap-2 mb-4">
+              <div className="relative w-64">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   placeholder="Search services..."
-                  className="pl-10"
+                  className="pl-9 pr-8 h-9 text-sm"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                 />
+                {search && (
+                  <button
+                    onClick={() => setSearch("")}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
               </div>
+
               <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-                <SelectTrigger className="w-full sm:w-48">
-                  <Filter className="mr-2 h-4 w-4" />
-                  <SelectValue placeholder="Category" />
+                <SelectTrigger className="w-96 h-9 text-sm">
+                  <Filter className="mr-2 h-3.5 w-3.5 shrink-0" />
+                  <SelectValue placeholder="All Categories" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="max-h-64">
                   <SelectItem value="all">All Categories</SelectItem>
                   {categories.map((cat) => (
-                    <SelectItem key={cat} value={cat} className="capitalize">{cat}</SelectItem>
+                    <SelectItem key={cat} value={cat}>
+                      {cat}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
+            {/* Results count */}
+            {!servicesLoading && (
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-xs text-muted-foreground">
+                  {services.length} service{services.length !== 1 ? "s" : ""}
+                  {debouncedSearch && ` matching "${debouncedSearch}"`}
+                </p>
+                {(debouncedSearch || selectedCategory !== "all") && (
+                  <button
+                    onClick={() => { setSearch(""); setSelectedCategory("all"); }}
+                    className="text-xs text-emerald-500 hover:underline"
+                  >
+                    Clear filters
+                  </button>
+                )}
+              </div>
+            )}
 
             {servicesLoading ? (
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -284,35 +307,54 @@ export default function OrdersPage() {
                   <Skeleton key={i} className="h-24 w-full" />
                 ))}
               </div>
+            ) : services.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-10 text-muted-foreground">
+                <Search className="h-8 w-8 mb-2 opacity-40" />
+                <p className="text-sm">No services found</p>
+                {(debouncedSearch || selectedCategory !== "all") && (
+                  <button
+                    onClick={() => { setSearch(""); setSelectedCategory("all"); }}
+                    className="mt-2 text-xs text-emerald-500 hover:underline"
+                  >
+                    Clear filters
+                  </button>
+                )}
+              </div>
             ) : (
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 max-h-96 overflow-y-auto pr-2">
-                {filteredServices.slice(0, 30).map((service) => (
+                {services.map((service) => (
                   <div
                     key={service.service}
                     className="flex flex-col justify-between p-3 rounded-lg border border-border hover:border-emerald-500/50 transition-colors group cursor-pointer"
                     onClick={() => handlePlaceOrder(service)}
                   >
                     <div className="mb-2">
-                      <div className="text-xs text-muted-foreground mb-1">ID: {service.service}</div>
+                      <div className="text-xs text-muted-foreground mb-1">
+                        ID: {service.service}
+                      </div>
                       <div className="text-sm font-medium line-clamp-2 group-hover:text-emerald-500 transition-colors">
                         {service.name}
                       </div>
+                      {service.category && (
+                        <div className="text-xs text-muted-foreground mt-1 truncate">
+                          {service.category}
+                        </div>
+                      )}
                     </div>
-                    <div className="flex items-center justify-between text-xs text-muted-foreground">
-                      <span>{formatPrice(parseFloat(service.rate), 4)}/1K</span>
-                      <span>{parseInt(service.min).toLocaleString()} – {parseInt(service.max).toLocaleString()}</span>
+                    <div className="flex items-center justify-between text-xs mt-1">
+                      <span className="font-semibold text-emerald-500">
+                        {currency} {Number(service.rate).toFixed(4)}/1K
+                      </span>
+                      <span className="text-muted-foreground">
+                        {Number(service.min).toLocaleString()} – {Number(service.max).toLocaleString()}
+                      </span>
                     </div>
                   </div>
                 ))}
               </div>
             )}
-
-            {filteredServices.length === 0 && !servicesLoading && (
-              <div className="text-center py-8 text-muted-foreground">
-                No services found. Try adjusting your search.
-              </div>
-            )}
           </CardContent>
+
         </Card>
       </motion.div>
 
@@ -462,7 +504,7 @@ export default function OrdersPage() {
               <div className="flex justify-between mb-2">
                 <span className="text-sm text-muted-foreground">Rate per 1,000:</span>
                 <span className="font-medium">
-                  {selectedService ? formatPrice(parseFloat(selectedService.rate), 4) : formatPrice(0, 4)}
+                  {selectedService ? parseFloat(selectedService.rate) : 0}
                 </span>
               </div>
               <div className="flex justify-between mb-2">
@@ -475,7 +517,7 @@ export default function OrdersPage() {
               <div className="flex justify-between">
                 <span className="font-medium">Total:</span>
                 <span className="font-bold text-emerald-500">
-                  {formatPrice(calculatePriceUsd(), 4)}
+                  {calculatePrice()}
                 </span>
               </div>
             </div>
@@ -485,7 +527,7 @@ export default function OrdersPage() {
             <Button variant="outline" onClick={() => setOrderDialogOpen(false)}>Cancel</Button>
             <Button
               className="bg-emerald-500 hover:bg-emerald-600"
-              onClick={() => createOrderMutation.mutateAsync().catch(() => {})}
+              onClick={() => createOrderMutation.mutateAsync().catch(() => { })}
               disabled={createOrderMutation.isPending}
             >
               {createOrderMutation.isPending ? (

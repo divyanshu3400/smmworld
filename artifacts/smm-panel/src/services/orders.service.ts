@@ -18,7 +18,6 @@ export interface CreateOrderData {
   platform: string
   link: string
   quantity: number
-  priceUsd: number
 }
 
 async function getToken(): Promise<string> {
@@ -42,7 +41,6 @@ export async function createOrder(
         platform: orderData.platform,
         link: orderData.link,
         quantity: orderData.quantity,
-        priceUsd: orderData.priceUsd,
       },
       token
     )

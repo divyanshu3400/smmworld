@@ -42,7 +42,6 @@ export interface CreateOrderParams {
   platform: string;
   link: string;
   quantity: number;
-  priceUsd: number;
 }
 
 export interface OrderResult {
@@ -51,10 +50,25 @@ export interface OrderResult {
   externalOrderId?: string;
 }
 
+export interface GetServicesParams {
+  category?: string;
+  search?: string;
+}
+
 // Public — no token needed
-export async function getServices(): Promise<SMMService[]> {
-  const data = await apiFetch<{ services: SMMService[] }>("/services");
+export async function getServices(params?: GetServicesParams): Promise<SMMService[]> {
+  const query = new URLSearchParams();
+  if (params?.category) query.set("category", params.category);
+  if (params?.search) query.set("search", params.search);
+
+  const path = query.toString() ? `/services?${query.toString()}` : "/services";
+  const data = await apiFetch<{ services: SMMService[] }>(path);
   return data.services;
+}
+
+export async function getCategories(): Promise<string[]> {
+  const data = await apiFetch<{ categories: string[] }>("/categories");
+  return data.categories;
 }
 
 // Authenticated
