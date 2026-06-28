@@ -34,7 +34,7 @@ export async function syncSmmServices(): Promise<{ synced: number; error?: strin
             provider_rate_inr: (parseFloat(s.rate) * usdToInr).toFixed(6),
             min: s.min ?? 10,
             max: s.max ?? 100000,
-            updated_at: new Date().toISOString(),
+            last_synced_at: new Date().toISOString(),
         }));
 
         const { error } = await supabaseAdmin
@@ -53,7 +53,7 @@ export async function syncSmmServices(): Promise<{ synced: number; error?: strin
         return { synced: 0, error: String(err) };
     }
 }
-const EXCHANGE_API_URL = "https://v6.exchangerate-api.com/v6/YOUR_API_KEY/latest/USD";
+const EXCHANGE_API_URL = "https://api.exchangerate-api.com/v4/latest/USD";
 
 interface ExchangeRateRow {
     base_currency: string;
