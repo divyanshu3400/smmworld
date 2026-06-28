@@ -36,6 +36,8 @@ import { TIMEZONES } from '@/lib/constants'
 import { SUPPORTED_CURRENCIES, type CurrencyCode } from '@/lib/currency'
 import TwoFactorAuth from '@/components/settings/TwoFactorAuth'
 import type { z } from 'zod'
+import { useEffect } from 'react'
+import { useCurrency } from '@/contexts/CurrencyContext'
 
 type PasswordFormData = z.infer<typeof updatePasswordSchema>
 
@@ -55,6 +57,7 @@ const item = {
 export default function SettingsPage() {
   const { user } = useAuth()
   const queryClient = useQueryClient()
+  const { setCurrency } = useCurrency();
 
   const { data: settings, isLoading } = useQuery({
     queryKey: ['settings'],
@@ -67,7 +70,11 @@ export default function SettingsPage() {
     queryFn: () => getWallet(user!.id),
     enabled: !!user?.id,
   })
-
+  useEffect(() => {
+    if (settings?.preferred_currency) {
+      setCurrency(settings.preferred_currency as CurrencyCode)
+    }
+  }, [settings?.preferred_currency])
   const currencyLocked = (wallet?.balance ?? 0) > 0
   const lockedCurrencySymbol = wallet?.currency
     ? SUPPORTED_CURRENCIES[wallet.currency as CurrencyCode]?.symbol || wallet.currency
@@ -76,7 +83,10 @@ export default function SettingsPage() {
   const updateSettingsMutation = useMutation({
     mutationFn: (updates: Parameters<typeof updateSettings>[1]) =>
       updateSettings(user!.id, updates),
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
+      if (variables.preferred_currency) {
+        setCurrency(variables.preferred_currency as CurrencyCode)
+      }
       queryClient.invalidateQueries({ queryKey: ['settings'] })
       toast.success('Settings updated')
     },
@@ -84,7 +94,6 @@ export default function SettingsPage() {
       toast.error('Failed to update settings')
     },
   })
-
   const passwordForm = useForm<PasswordFormData>({
     resolver: zodResolver(updatePasswordSchema),
     defaultValues: {

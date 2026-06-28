@@ -32,8 +32,9 @@ export default function TopBar() {
   const { user, profile, logout } = useAuth()
   const navigate = useNavigate()
   const { currency } = useCurrency()
+  console.log(currency)
   const currencySymbol = getCurrencySymbol(currency as CurrencyCode)
-
+  console.log(currencySymbol)
   const { data: unreadCount = 0 } = useQuery({
     queryKey: ['unread-count'],
     queryFn: () => getUnreadCount(user!.id),
