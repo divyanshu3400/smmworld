@@ -146,7 +146,6 @@ const CreateOrderSchema = z.object({
   link: z.string().url("Invalid URL"),
   quantity: z.number().int().positive(),
 });
-const QUANTITY_FACTOR = 0.90
 router.post("/order", requireAuth, orderLimiter, async (req, res) => {
   const userId = req.userId!;
 

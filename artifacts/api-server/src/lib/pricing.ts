@@ -17,7 +17,6 @@ const PLATFORM_MARKUP: Record<string, number> = {
 };
 
 export interface ServicePricing {
-    providerRateUsd: number;
     providerRateInr: number;
     usdToInr: number;
     sellRateInr: number;
@@ -35,7 +34,7 @@ export interface ServicePricing {
 }
 
 export async function calculatePricing(
-    providerRateUsd: number,
+    providerRateUsd: number,   // per 1000 units in USD
     quantity: number,
     walletCurrency: string,
     platform?: string,
@@ -62,40 +61,37 @@ export async function calculatePricing(
     const cashfreeFee = cashfreeFeePercent / 100;
     const usdToInr = Number(rateResult.data?.rate ?? 84);
 
-    // Platform-based markup multiplier
     const platformKey = platform?.toLowerCase() ?? "default";
-    const platformMultiplier = PLATFORM_MARKUP[platformKey] ?? PLATFORM_MARKUP.default;
-
-    // Quantity we actually submit to provider (e.g. 90% of ordered)
+    const platformMultiplier = PLATFORM_MARKUP[platformKey] ?? PLATFORM_MARKUP["default"]!;
     const fulfilmentQuantity = Math.floor(quantity * quantityFactor);
 
-    // Per 1000 units — sell rate includes platform multiplier
+    // Step 1: USD → INR
     const providerRateInr = providerRateUsd * usdToInr;
+
+    // Step 2: apply markup + cashfree + platform multiplier
     const afterMarkup = providerRateInr * (1 + markup);
     const sellRateInr = afterMarkup * (1 + cashfreeFee) * platformMultiplier;
 
-    // User is charged for full quantity at sell rate
+    // Step 3: calculate amounts
     const rawUserChargedInr = (sellRateInr * quantity) / 1000;
     const userChargedInr = Math.max(rawUserChargedInr, minOrderChargeInr);
 
-    // Provider cost is only for fulfilment quantity
     const providerCostInr = (providerRateInr * fulfilmentQuantity) / 1000;
     const providerCostUsd = (providerRateUsd * fulfilmentQuantity) / 1000;
 
-    const afterMarkupAmount = (afterMarkup * quantity) / 1000;
-    const cashfreeFeeInr = userChargedInr - afterMarkupAmount * platformMultiplier;
+    const afterMarkupAmount = (afterMarkup * platformMultiplier * quantity) / 1000;
+    const cashfreeFeeInr = afterMarkupAmount * cashfreeFee;
     const marginInr = userChargedInr - providerCostInr - cashfreeFeeInr;
 
     const userChargedAmount =
         walletCurrency === "INR" ? userChargedInr : userChargedInr / usdToInr;
 
     return {
-        providerRateUsd,
         providerRateInr: round(providerRateInr),
-        usdToInr,
-        sellRateInr: round(sellRateInr),
         providerCostInr: round(providerCostInr),
         providerCostUsd: round(providerCostUsd),
+        usdToInr,
+        sellRateInr: round(sellRateInr),
         userChargedInr: round(userChargedInr),
         marginInr: round(marginInr),
         cashfreeFeeInr: round(cashfreeFeeInr),
@@ -107,7 +103,6 @@ export async function calculatePricing(
         platformMultiplier,
     };
 }
-
 function round(n: number, decimals = 4): number {
     return Number(n.toFixed(decimals));
 }
