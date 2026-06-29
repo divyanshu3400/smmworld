@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Link, NavLink, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { LayoutDashboard, Wallet, Receipt, Gift, Bell, User, Settings, ChevronLeft, ChevronRight, Shield, ChartBar as BarChart3, Users, Zap, Megaphone, CreditCard, Menu, X } from 'lucide-react'
+import { LayoutDashboard, Wallet, Receipt, Gift, Bell, User, Settings, ChevronLeft, ChevronRight, Shield, ChartBar as BarChart3, Users, Zap, Megaphone, CreditCard, Menu, X, MessageCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ROUTES, APP_NAME } from '@/lib/constants'
 import { useAdmin } from '@/hooks/useAdmin'
@@ -22,6 +22,7 @@ const adminNavigation = [
   { name: 'Users', href: ROUTES.ADMIN_USERS, icon: Users },
   { name: 'Announcements', href: ROUTES.ADMIN_ANNOUNCEMENTS, icon: Megaphone },
   { name: 'Payment Gateways', href: ROUTES.ADMIN_PAYMENT_SETTINGS, icon: CreditCard },
+  { name: 'Tickets', href: ROUTES.ADMIN_CHAT, icon: MessageCircle },
 ]
 
 // ─── Hook: detect mobile breakpoint ────────────────────────────────────────

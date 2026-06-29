@@ -19,6 +19,7 @@ export const ROUTES = {
   ADMIN: '/admin',
   ADMIN_ORDERS: '/admin/orders',
   ADMIN_USERS: '/admin/users',
+  ADMIN_CHAT: '/admin/chat',
   ADMIN_ANNOUNCEMENTS: '/admin/announcements',
   ADMIN_PAYMENT_SETTINGS: '/admin/payment-settings',
 } as const
