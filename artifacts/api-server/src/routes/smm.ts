@@ -32,7 +32,7 @@ const generalLimiter = rateLimit({
 
 router.get("/services", generalLimiter, async (req, res) => {
   try {
-    const { category, search, platform } = req.query; // ← accept platform from query
+    const { category, search, platform } = req.query;
 
     let query = supabaseAdmin
       .from("smm_services_cache")

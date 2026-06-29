@@ -89,8 +89,9 @@ export default function OrdersPage() {
       getServices({
         category: selectedCategory === "all" ? undefined : selectedCategory,
         search: debouncedSearch || undefined,
-        platform,  // ← passed here
+        platform,
       }),
+    enabled: selectedCategory !== "all" && selectedCategory !== "", // ← only fetch when category selected
     staleTime: 5 * 60 * 1000,
   });
 
@@ -307,23 +308,28 @@ export default function OrdersPage() {
                 )}
               </div>
             )}
-
             {servicesLoading ? (
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {Array.from({ length: 6 }).map((_, i) => (
                   <Skeleton key={i} className="h-24 w-full" />
                 ))}
               </div>
+            ) : selectedCategory === "all" || selectedCategory === "" ? (
+              <div className="col-span-full flex flex-col items-center justify-center py-10 text-muted-foreground">
+                <Filter className="h-8 w-8 mb-3 opacity-40" />
+                <p className="text-sm font-medium">Select a category to view services</p>
+                <p className="text-xs mt-1 opacity-60">Choose a platform category from the dropdown above</p>
+              </div>
             ) : services.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-10 text-muted-foreground">
                 <Search className="h-8 w-8 mb-2 opacity-40" />
                 <p className="text-sm">No services found</p>
-                {(debouncedSearch || selectedCategory !== "all") && (
+                {debouncedSearch && (
                   <button
-                    onClick={() => { setSearch(""); setSelectedCategory("all"); }}
+                    onClick={() => setSearch("")}
                     className="mt-2 text-xs text-emerald-500 hover:underline"
                   >
-                    Clear filters
+                    Clear search
                   </button>
                 )}
               </div>
@@ -342,15 +348,10 @@ export default function OrdersPage() {
                       <div className="text-sm font-medium line-clamp-2 group-hover:text-emerald-500 transition-colors">
                         {service.name}
                       </div>
-                      {service.category && (
-                        <div className="text-xs text-muted-foreground mt-1 truncate">
-                          {service.category}
-                        </div>
-                      )}
                     </div>
                     <div className="flex items-center justify-between text-xs mt-1">
                       <span className="font-semibold text-emerald-500">
-                        {currency} {Number(service.rate).toFixed(4)}/1K
+                        ₹{Number(service.rate).toFixed(4)}/1K
                       </span>
                       <span className="text-muted-foreground">
                         {Number(service.min).toLocaleString()} – {Number(service.max).toLocaleString()}
