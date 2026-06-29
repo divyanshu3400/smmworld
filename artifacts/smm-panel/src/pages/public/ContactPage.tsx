@@ -12,7 +12,7 @@ const fadeUp = {
 const supportCards = [
   { icon: MessageSquare, title: 'General Inquiry', description: 'Questions about our services or platform', email: 'hello@smmhub.com', action: 'Email Us' },
   { icon: Briefcase, title: 'Sales', description: 'Enterprise plans and partnerships', email: 'sales@smmhub.com', action: 'Contact Sales' },
-  { icon: Headphones, title: 'Technical Support', description: 'Issues with orders, API, or your account', email: 'support@smmhub.com', action: 'Get Support' },
+  { icon: Headphones, title: 'Technical Support', description: 'Issues with orders, API, or your account', email: 'support@ssmm.online', action: 'Get Support' },
   { icon: Phone, title: 'Live Chat', description: 'Available 24/7 for instant help', email: 'Available in dashboard', action: 'Start Chat' },
 ]
 
@@ -53,33 +53,6 @@ export default function ContactPage() {
         subtitle="Have a question? Need help with an order? Want to partner with us? Our team is available 24/7 to support you."
         breadcrumbs={[{ label: 'Home', href: '/' }, { label: 'Contact' }]}
       />
-
-      {/* Support Cards */}
-      <section className="py-12 px-6 mx-auto max-w-7xl">
-        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {supportCards.map((card, i) => (
-            <motion.div
-              key={card.title}
-              initial="hidden"
-              whileInView="show"
-              viewport={{ once: true }}
-              custom={i}
-              variants={fadeUp}
-              className="group rounded-2xl bg-card border border-border p-6 hover:border-emerald-500/30 hover:shadow-lg hover:shadow-emerald-500/5 transition-all duration-300 hover:-translate-y-1"
-            >
-              <div className="h-12 w-12 rounded-xl bg-emerald-500/10 flex items-center justify-center mb-4 group-hover:bg-emerald-500/20 transition-colors">
-                <card.icon className="h-5 w-5 text-emerald-500" />
-              </div>
-              <h3 className="font-bold text-foreground mb-2">{card.title}</h3>
-              <p className="text-sm text-muted-foreground mb-3">{card.description}</p>
-              <p className="text-sm text-emerald-600 dark:text-emerald-400 font-medium mb-4">{card.email}</p>
-              <button className="text-sm font-semibold text-foreground hover:text-emerald-500 transition-colors flex items-center gap-1 group-hover:gap-2">
-                {card.action} <Send className="h-3.5 w-3.5" />
-              </button>
-            </motion.div>
-          ))}
-        </div>
-      </section>
 
       {/* Contact Form + Info */}
       <section className="py-20 px-6 bg-card/30">
@@ -184,8 +157,8 @@ export default function ContactPage() {
                   </div>
                   <div>
                     <h3 className="font-bold text-foreground mb-1">Email Us</h3>
-                    <p className="text-sm text-muted-foreground">support@smmhub.com</p>
-                    <p className="text-sm text-muted-foreground">sales@smmhub.com</p>
+                    <p className="text-sm text-muted-foreground">support@ssmm.online</p>
+                    {/* <p className="text-sm text-muted-foreground">sales@smmhub.com</p> */}
                   </div>
                 </div>
                 <div className="flex items-start gap-4">

@@ -115,8 +115,8 @@ export default function PublicFooter() {
             </p>
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Mail className="h-4 w-4" />
-              <a href="mailto:support@smmhub.com" className="hover:text-foreground transition-colors">
-                support@smmhub.com
+              <a href="mailto:support@ssmm.online" className="hover:text-foreground transition-colors">
+                support@ssmm.online
               </a>
             </div>
           </div>
