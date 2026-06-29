@@ -100,6 +100,20 @@ export async function cancelOrder(
   }, token);
 }
 
+export interface FrequentService {
+  service_id: string;
+  service_name: string;
+  platform: string;
+  order_count: number;
+  last_ordered_at: string;
+  last_link: string;
+}
+
+export async function getFrequentServices(token: string): Promise<FrequentService[]> {
+  const data = await apiFetch<{ services: FrequentService[] }>("/frequent-services", {}, token);
+  return data.services;
+}
+
 // ── Helpers preserved for UI use ────────────────────────────────────────────
 
 export const serviceCategories = [

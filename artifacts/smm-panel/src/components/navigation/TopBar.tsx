@@ -1,6 +1,5 @@
 import { useNavigate } from 'react-router-dom'
 import {
-  Bell,
   Search,
   LogOut,
   User,
@@ -8,6 +7,7 @@ import {
   ChevronDown,
   Wallet,
 } from 'lucide-react'
+import NotificationBell from '@/components/chat/NotificationBell'
 import { useAuth } from '@/hooks/useAuth'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
@@ -23,7 +23,6 @@ import {
 import { getInitials, getFullName } from '@/lib/formatters'
 import { ROUTES } from '@/lib/constants'
 import { useQuery } from '@tanstack/react-query'
-import { getUnreadCount } from '@/services/notification.service'
 import { getWallet } from '@/services/wallet.service'
 import { useCurrency } from '@/contexts/CurrencyContext'
 import { getCurrencySymbol, type CurrencyCode } from '@/lib/currency'
@@ -35,7 +34,7 @@ export default function TopBar() {
   const navigate = useNavigate()
   const { currency, setCurrency } = useCurrency()
 
-  const { data: settings, isLoading } = useQuery({
+  const { data: settings } = useQuery({
     queryKey: ['settings'],
     queryFn: () => getSettings(user!.id),
     enabled: !!user?.id,
@@ -46,15 +45,8 @@ export default function TopBar() {
       setCurrency(settings.preferred_currency as CurrencyCode)
     }
   }, [settings?.preferred_currency])
-  
-  const currencySymbol = getCurrencySymbol(currency as CurrencyCode)
 
-  const { data: unreadCount = 0 } = useQuery({
-    queryKey: ['unread-count'],
-    queryFn: () => getUnreadCount(user!.id),
-    enabled: !!user,
-    refetchInterval: 30000,
-  })
+  const currencySymbol = getCurrencySymbol(currency as CurrencyCode)
 
   // Same query key as the wallet page — shares the React Query cache.
   // When the wallet page invalidates ['wallet'] after a top-up, this
@@ -107,18 +99,7 @@ export default function TopBar() {
             <span>{currencySymbol}{(wallet?.balance ?? 0).toFixed(2)}</span>
           </button>
 
-          <button
-            type="button"
-            onClick={() => navigate(ROUTES.NOTIFICATIONS)}
-            className="relative p-2 text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <Bell className="h-5 w-5" />
-            {unreadCount > 0 && (
-              <span className="absolute top-1 right-1 h-4 w-4 rounded-full bg-emerald-500 text-[10px] font-bold text-white flex items-center justify-center">
-                {unreadCount > 9 ? '9+' : unreadCount}
-              </span>
-            )}
-          </button>
+          <NotificationBell />
 
           <div className="hidden sm:block h-6 w-px bg-border" />
 

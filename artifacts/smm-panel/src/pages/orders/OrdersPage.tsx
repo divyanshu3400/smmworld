@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
 import { Package, Search, ListFilter as Filter, ChevronLeft, ChevronRight, RefreshCw, X, ShoppingCart, Loader as Loader2 } from 'lucide-react'
@@ -40,6 +40,7 @@ import {
 import { toast } from 'sonner'
 import type { Order } from '@/types/database'
 import { detectPlatformFromCategory } from '@/lib/platformDetector'
+import FrequentServices from '@/components/orders/FrquestServices'
 
 const container = {
   hidden: { opacity: 0 },
@@ -197,6 +198,13 @@ export default function OrdersPage() {
     setOrderDialogOpen(true)
   }
 
+  const handleQuickOrder = (service: SMMService, prefillLink: string) => {
+    setSelectedService(service)
+    setOrderQuantity(service.min)
+    setOrderLink(prefillLink)
+    setOrderDialogOpen(true)
+  }
+
   const getStatusColor = (status: Order['status']) => {
     const colors: Record<string, string> = {
       pending: 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20',
@@ -246,6 +254,11 @@ export default function OrdersPage() {
             <CardDescription>Select a service, enter your link, and place your order</CardDescription>
           </CardHeader>
           <CardContent>
+            <FrequentServices
+              totalOrders={ordersData?.total ?? 0}
+              onQuickOrder={handleQuickOrder}
+            />
+
             <div className="flex gap-2 mb-4">
               <div className="relative w-64">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />

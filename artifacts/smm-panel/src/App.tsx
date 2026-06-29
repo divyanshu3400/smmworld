@@ -6,6 +6,7 @@ import { ThemeProvider } from '@/contexts/ThemeContext'
 import { Toaster } from '@/components/ui/sonner'
 import { router } from '@/routes/routes'
 import { queryClient } from '@/lib/query-client'
+import ChatWidget from '@/components/chat/ChatWidget'
 
 function App() {
   return (
@@ -14,6 +15,7 @@ function App() {
         <AuthProvider>
           <CurrencyProvider>
             <RouterProvider router={router} />
+            <ChatWidget />
             <Toaster
               position="top-right"
               toastOptions={{
