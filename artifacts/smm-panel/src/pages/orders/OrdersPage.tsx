@@ -39,6 +39,7 @@ import {
 } from '@/components/ui/table'
 import { toast } from 'sonner'
 import type { Order } from '@/types/database'
+import { detectPlatformFromCategory } from '@/lib/platformDetector'
 
 const container = {
   hidden: { opacity: 0 },
@@ -65,7 +66,7 @@ export default function OrdersPage() {
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [search, setSearch] = useState<string>("");
   const [debouncedSearch, setDebouncedSearch] = useState<string>("");
-  const { formatPrice, currency } = useCurrency()
+  const { currency } = useCurrency()
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search), 300);
@@ -78,12 +79,17 @@ export default function OrdersPage() {
     staleTime: 30 * 60 * 1000,
   });
 
+  const platform = detectPlatformFromCategory(
+    selectedCategory === "all" ? undefined : selectedCategory
+  );
+
   const { data: services = [], isLoading: servicesLoading } = useQuery({
-    queryKey: ["smm-services", selectedCategory, debouncedSearch],
+    queryKey: ["smm-services", selectedCategory, debouncedSearch, platform],
     queryFn: () =>
       getServices({
         category: selectedCategory === "all" ? undefined : selectedCategory,
         search: debouncedSearch || undefined,
+        platform,  // ← passed here
       }),
     staleTime: 5 * 60 * 1000,
   });
@@ -138,7 +144,7 @@ export default function OrdersPage() {
         {
           serviceId: selectedService.service,
           serviceName: selectedService.name,
-          platform: selectedCategory !== 'all' ? selectedCategory : 'other',
+          platform: platform,
           link: orderLink,
           quantity,
         },
@@ -258,10 +264,21 @@ export default function OrdersPage() {
                 )}
               </div>
 
-              <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+              <Select
+                value={selectedCategory}
+                onValueChange={setSelectedCategory}
+                disabled={categoriesLoading}
+              >
                 <SelectTrigger className="w-96 h-9 text-sm">
                   <Filter className="mr-2 h-3.5 w-3.5 shrink-0" />
-                  <SelectValue placeholder="All Categories" />
+                  {categoriesLoading ? (
+                    <span className="flex items-center gap-2 text-muted-foreground">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Loading...
+                    </span>
+                  ) : (
+                    <SelectValue placeholder="All Categories" />
+                  )}
                 </SelectTrigger>
                 <SelectContent className="max-h-64">
                   <SelectItem value="all">All Categories</SelectItem>

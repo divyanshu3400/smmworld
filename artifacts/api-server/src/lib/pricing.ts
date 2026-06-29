@@ -1,5 +1,21 @@
 import { supabaseAdmin } from "./supabaseAdmin";
 
+export const PLATFORM_MARKUP: Record<string, number> = {
+    instagram: 1.4,
+    youtube: 1.35,
+    tiktok: 1.3,
+    facebook: 1.25,
+    twitter: 1.2,
+    linkedin: 1.2,
+    telegram: 1.0,
+    snapchat: 1.15,
+    pinterest: 1.1,
+    threads: 1.15,
+    spotify: 1.2,
+    twitch: 1.15,
+    default: 1.15,
+};
+
 export interface ServicePricing {
     providerRateInr: number;
     usdToInr: number;
@@ -13,24 +29,15 @@ export interface ServicePricing {
     userChargedCurrency: string;
     markupPercent: number;
     cashfreeFeePercent: number;
-    fulfilmentQuantity: number;
+    fulfilmentQuantity: number;   // actual quantity sent to provider
+    platformMultiplier: number;   // for audit
 }
 
-/**
- * Calculate pricing for an SMM order.
- *
- * Formula (MUST match services list exactly):
- *   sellRateInr = providerRateUsd × usdToInr × (1 + markupPercent/100) × (1 + cashfreeFeePercent/100)
- *   userChargedInr = (sellRateInr × quantity) / 1000
- *
- * @param providerRateUsd - Provider rate per 1000 units in USD (from smm_services_cache.provider_rate)
- * @param quantity - Number of units to order
- * @param walletCurrency - User's wallet currency
- */
 export async function calculatePricing(
     providerRateUsd: number,
     quantity: number,
     walletCurrency: string,
+    platform?: string,
 ): Promise<ServicePricing> {
     const [settingsResult, rateResult] = await Promise.all([
         supabaseAdmin
@@ -50,33 +57,24 @@ export async function calculatePricing(
     const cashfreeFeePercent = Number(settingsResult.data?.cashfree_fee_percent ?? 2);
     const quantityFactor = Number(settingsResult.data?.quantity_factor ?? 1.0);
     const minOrderChargeInr = Number(settingsResult.data?.min_order_charge_inr ?? 0);
-
     const markup = markupPercent / 100;
     const cashfreeFee = cashfreeFeePercent / 100;
     const usdToInr = Number(rateResult.data?.rate ?? 84);
 
+    const platformKey = platform?.toLowerCase() ?? "default";
+    const platformMultiplier = PLATFORM_MARKUP[platformKey] ?? PLATFORM_MARKUP["default"]!;
     const fulfilmentQuantity = Math.floor(quantity * quantityFactor);
 
-    // Step 1: Convert USD rate to INR
     const providerRateInr = providerRateUsd * usdToInr;
-
-    // Step 2: Apply markup and cashfree fee (EXACT same formula as services list)
-    const sellRateInr = providerRateInr * (1 + markup) * (1 + cashfreeFee);
-
-    // Step 3: Calculate user charge
+    const afterMarkup = providerRateInr * (1 + markup);
+    const sellRateInr = afterMarkup * (1 + cashfreeFee) * platformMultiplier;
     const rawUserChargedInr = (sellRateInr * quantity) / 1000;
     const userChargedInr = Math.max(rawUserChargedInr, minOrderChargeInr);
-
-    // Provider cost based on actual fulfilment quantity
     const providerCostInr = (providerRateInr * fulfilmentQuantity) / 1000;
     const providerCostUsd = (providerRateUsd * fulfilmentQuantity) / 1000;
-
-    // Fee breakdown (for margin calculation)
-    const afterMarkupAmount = (providerRateInr * (1 + markup) * quantity) / 1000;
+    const afterMarkupAmount = (afterMarkup * platformMultiplier * quantity) / 1000;
     const cashfreeFeeInr = afterMarkupAmount * cashfreeFee;
     const marginInr = userChargedInr - providerCostInr - cashfreeFeeInr;
-
-    // Convert to wallet currency if needed
     const userChargedAmount =
         walletCurrency === "INR" ? userChargedInr : userChargedInr / usdToInr;
 
@@ -94,9 +92,10 @@ export async function calculatePricing(
         markupPercent,
         cashfreeFeePercent,
         fulfilmentQuantity,
+        platformMultiplier,
     };
 }
 
-function round(n: number, decimals = 4): number {
+export function round(n: number, decimals = 4): number {
     return Number(n.toFixed(decimals));
 }

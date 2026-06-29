@@ -11,7 +11,7 @@ import {
   fetchOrderStatus,
   cancelProviderOrder,
 } from "../services/smmService";
-import { calculatePricing } from "../lib/pricing";
+import { calculatePricing, PLATFORM_MARKUP, round } from "../lib/pricing";
 
 const router = Router();
 
@@ -30,12 +30,9 @@ const generalLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-// ── GET /api/smm/services ────────────────────────────────────────────────────
-// Returns services from cache with sell_rate_inr (price per 1000 units in INR)
-// Formula: sellRateInr = providerRateUsd × usdToInr × (1 + markup/100) × (1 + cashfreeFee/100)
 router.get("/services", generalLimiter, async (req, res) => {
   try {
-    const { category, search } = req.query;
+    const { category, search, platform } = req.query; // ← accept platform from query
 
     let query = supabaseAdmin
       .from("smm_services_cache")
@@ -50,7 +47,7 @@ router.get("/services", generalLimiter, async (req, res) => {
       query,
       supabaseAdmin
         .from("platform_settings")
-        .select("markup_percent, cashfree_fee_percent")
+        .select("markup_percent, cashfree_fee_percent, quantity_factor, min_order_charge_inr")
         .eq("id", 1)
         .maybeSingle(),
       supabaseAdmin
@@ -66,11 +63,16 @@ router.get("/services", generalLimiter, async (req, res) => {
       return res.status(500).json({ error: "Failed to fetch services" });
     }
 
+    // Replicate exact same formula as calculatePricing
     const markupPercent = Number(settingsResult.data?.markup_percent ?? 20);
     const cashfreeFeePercent = Number(settingsResult.data?.cashfree_fee_percent ?? 2);
     const markup = markupPercent / 100;
     const cashfreeFee = cashfreeFeePercent / 100;
-    const usdToInr = Number(rateResult.data?.rate ?? 84);
+    const usdToInr = Number(rateResult.data?.rate ?? 94.44);
+
+    // Use platform from query if provided, else default
+    const platformKey = (typeof platform === "string" ? platform : "default").toLowerCase();
+    const platformMultiplier = PLATFORM_MARKUP[platformKey] ?? PLATFORM_MARKUP["default"]!;
 
     let rows = servicesResult.data ?? [];
 
@@ -83,13 +85,13 @@ router.get("/services", generalLimiter, async (req, res) => {
       );
     }
 
-    // EXACT same formula as calculatePricing:
-    // sellRateInr = providerRateUsd × usdToInr × (1 + markup) × (1 + cashfreeFee)
-    const multiplier = (1 + markup) * (1 + cashfreeFee);
-
     const services = rows.map((s) => {
-      const providerRateUsd = Number(s.provider_rate) || 0;
-      const sellRateInr = providerRateUsd * usdToInr * multiplier;
+      const providerRateUsd = Number(s.provider_rate);
+
+      // Exact same steps as calculatePricing
+      const providerRateInr = providerRateUsd * usdToInr;
+      const afterMarkup = providerRateInr * (1 + markup);
+      const sellRateInr = afterMarkup * (1 + cashfreeFee) * platformMultiplier;
 
       return {
         service: s.service_id,
@@ -99,17 +101,11 @@ router.get("/services", generalLimiter, async (req, res) => {
         description: s.description,
         min: s.min,
         max: s.max,
-        rate: Number(sellRateInr.toFixed(4)), // INR per 1000 units
-        provider_rate: providerRateUsd, // USD per 1000 units (for reference)
+        rate: round(sellRateInr), // ← per 1000 units, same as calculatePricing.sellRateInr
       };
     });
 
-    return res.json({
-      services,
-      markup_percent: markupPercent,
-      cashfree_fee_percent: cashfreeFeePercent,
-      usd_to_inr: usdToInr,
-    });
+    return res.json({ services });
   } catch (err) {
     logger.error({ err }, "Failed to fetch SMM services");
     return res.status(502).json({ error: "Failed to fetch services" });
@@ -200,7 +196,6 @@ router.post("/order", requireAuth, orderLimiter, async (req, res) => {
   const wallet = walletResult.data;
   const selectedService = serviceResult.data;
   const providerRateUsd = Number(selectedService.provider_rate);
-  const walletBalance = Number(wallet.balance);
 
   // Validate quantity against selected service limits
   if (quantity < selectedService.min || quantity > selectedService.max) {
@@ -246,13 +241,14 @@ router.post("/order", requireAuth, orderLimiter, async (req, res) => {
     providerRateUsd,
     quantity,
     wallet.currency ?? "INR",
+    platform
   );
   // 4. Check balance
-  if (walletBalance < pricing.userChargedAmount) {
+  if (wallet.balance < pricing.userChargedAmount) {
     res.status(400).json({
       error: "Insufficient wallet balance",
       required: Number(pricing.userChargedAmount.toFixed(2)),
-      available: Number(walletBalance.toFixed(2)),
+      available: Number(wallet.balance.toFixed(2)),
       currency: pricing.userChargedCurrency,
     });
     return;
@@ -277,7 +273,7 @@ router.post("/order", requireAuth, orderLimiter, async (req, res) => {
     {
       p_wallet_id: wallet.id,
       p_amount: pricing.userChargedAmount,
-      p_expected_balance: walletBalance,
+      p_expected_balance: wallet.balance,
     }
   );
 
@@ -286,14 +282,15 @@ router.post("/order", requireAuth, orderLimiter, async (req, res) => {
     return;
   }
 
-  const newBalance = walletBalance - pricing.userChargedAmount;
+  const newBalance = wallet.balance - pricing.userChargedAmount;
 
-  // 7. Create order record
+  // 7. Create order record — store both service IDs for audit
   const { data: order, error: orderErr } = await supabaseAdmin
     .from("orders")
     .insert({
       user_id: userId,
       service_id: String(serviceId),
+      fulfilment_service_id: String(fulfilmentServiceId),
       service_name: serviceName,
       platform,
       link,
@@ -358,7 +355,14 @@ router.post("/order", requireAuth, orderLimiter, async (req, res) => {
         user_charged_inr_equivalent: pricing.userChargedInr,
         provider_cost_inr: pricing.providerCostInr,
         margin_inr: pricing.marginInr,
+        cashfree_fee_inr: pricing.cashfreeFeeInr,
         markup_percent_applied: pricing.markupPercent,
+        cashfree_fee_percent_applied: pricing.cashfreeFeePercent,
+        usd_to_inr_rate: pricing.usdToInr,
+        selected_service_id: String(serviceId),
+        platform_multiplier: pricing.platformMultiplier,      // ← add
+        fulfilment_quantity: pricing.fulfilmentQuantity,
+        fulfilment_service_id: String(fulfilmentServiceId),
       }),
     ]);
 
@@ -419,6 +423,24 @@ router.post("/order", requireAuth, orderLimiter, async (req, res) => {
   }
 });
 
+// Temporary debug route — remove after testing
+router.get("/debug/pricing", async (req, res) => {
+  const {
+    rate = "0.0014",
+    quantity = "1000",
+    currency = "INR",
+    platform = "instagram",
+  } = req.query;
+
+  const pricing = await calculatePricing(
+    Number(rate),
+    Number(quantity),
+    String(currency),
+    String(platform),
+  );
+
+  return res.json(pricing);
+});
 // ── GET /api/smm/order/:id ───────────────────────────────────────────────────
 router.get("/order/:id", requireAuth, generalLimiter, async (req, res) => {
   const userId = req.userId!;
@@ -517,7 +539,7 @@ router.post("/cancel", requireAuth, orderLimiter, async (req, res) => {
       .single();
 
     if (wallet) {
-      const refundBalance = Number(wallet.balance) + order.price_usd;
+      const refundBalance = wallet.balance + order.price_usd;
       await supabaseAdmin
         .from("wallets")
         .update({ balance: refundBalance, updated_at: new Date().toISOString() })

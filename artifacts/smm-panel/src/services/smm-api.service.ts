@@ -53,13 +53,14 @@ export interface OrderResult {
 export interface GetServicesParams {
   category?: string;
   search?: string;
+  platform?: string;
 }
 
-// Public — no token needed
 export async function getServices(params?: GetServicesParams): Promise<SMMService[]> {
   const query = new URLSearchParams();
   if (params?.category) query.set("category", params.category);
   if (params?.search) query.set("search", params.search);
+  if (params?.platform) query.set("platform", params.platform);
 
   const path = query.toString() ? `/services?${query.toString()}` : "/services";
   const data = await apiFetch<{ services: SMMService[] }>(path);
