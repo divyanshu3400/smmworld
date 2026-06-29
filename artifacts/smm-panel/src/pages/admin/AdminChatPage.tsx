@@ -17,70 +17,22 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useAdmin } from '@/hooks/useAdmin'
-import { useAuth } from '@/hooks/useAuth'
-import { supabase } from '@/lib/supabase'
-import { apiUrl } from '@/lib/api'
 import { formatRelativeTime } from '@/lib/formatters'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 
-interface Conversation {
-  user_id: string
-  last_message: string
-  last_at: string
-  unread: number
-  email?: string
-}
-
-interface ChatMessage {
-  id: string
-  user_id: string
-  message: string
-  sender: 'user' | 'admin'
-  is_read: boolean
-  created_at: string
-}
-
-async function adminFetch<T>(path: string, options?: RequestInit): Promise<T> {
-  const { data } = await supabase.auth.getSession()
-  const token = data.session?.access_token
-  if (!token) throw new Error('Not authenticated')
-  const res = await fetch(`${apiUrl('')}${path}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-      ...(options?.headers as Record<string, string>),
-    },
-  })
-  const json = await res.json()
-  if (!res.ok) throw new Error(json?.error ?? `Request failed: ${res.status}`)
-  return json as T
-}
-
-async function getConversations(): Promise<Conversation[]> {
-  const data = await adminFetch<{ conversations: Conversation[] }>('/api/chat/admin/conversations')
-  return data.conversations
-}
-
-async function getAdminMessages(userId: string): Promise<ChatMessage[]> {
-  const data = await adminFetch<{ data: ChatMessage[] }>(`/api/chat/messages?userId=${userId}&pageSize=100`)
-  return data.data ?? []
-}
-
-async function sendAdminReply(userId: string, message: string): Promise<void> {
-  await adminFetch('/api/chat/admin/reply', {
-    method: 'POST',
-    body: JSON.stringify({ userId, message }),
-  })
-}
+import {
+  getAdminConversations,
+  getAdminMessages,
+  sendAdminReply,
+  subscribeToAdminChat,
+} from '@/services/chat.service'
 
 const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.04 } } }
 const item = { hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0 } }
 
 export default function AdminChatPage() {
   const { isAdmin, isLoading: adminLoading } = useAdmin()
-  const { user } = useAuth()
   const queryClient = useQueryClient()
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null)
   const [replyText, setReplyText] = useState('')
@@ -89,14 +41,17 @@ export default function AdminChatPage() {
 
   const { data: conversations = [], isLoading: convsLoading } = useQuery({
     queryKey: ['admin-conversations'],
-    queryFn: getConversations,
+    queryFn: getAdminConversations,
     enabled: !!isAdmin,
     refetchInterval: 15000,
   })
 
   const { data: messages = [], isLoading: msgsLoading } = useQuery({
     queryKey: ['admin-chat-messages', selectedUserId],
-    queryFn: () => getAdminMessages(selectedUserId!),
+    queryFn: async () => {
+      const res = await getAdminMessages(selectedUserId!)
+      return res.data
+    },
     enabled: !!selectedUserId,
     staleTime: 0,
   })
@@ -120,17 +75,10 @@ export default function AdminChatPage() {
   // Realtime: listen for new user messages on selected conversation
   useEffect(() => {
     if (!selectedUserId) return
-    const channel = supabase
-      .channel(`admin-chat:${selectedUserId}`)
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `user_id=eq.${selectedUserId}` },
-        () => {
-          queryClient.invalidateQueries({ queryKey: ['admin-chat-messages', selectedUserId] })
-          queryClient.invalidateQueries({ queryKey: ['admin-conversations'] })
-        }
-      )
-      .subscribe()
+    const channel = subscribeToAdminChat(selectedUserId, () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-chat-messages', selectedUserId] })
+      queryClient.invalidateQueries({ queryKey: ['admin-conversations'] })
+    })
     return () => { channel.unsubscribe() }
   }, [selectedUserId])
 

@@ -19,6 +19,7 @@ const SendMessageSchema = z.object({
   message: z.string().min(1).max(2000),
 });
 
+// ── POST /api/chat/messages — user sends a message ───────────────────────────
 router.post("/messages", requireAuth, msgLimiter, async (req, res) => {
   const userId = req.userId!;
   const parsed = SendMessageSchema.safeParse(req.body);
@@ -42,7 +43,7 @@ router.post("/messages", requireAuth, msgLimiter, async (req, res) => {
   res.status(201).json(data);
 });
 
-// ── GET /api/chat/messages — conversation history (paginated) ─────────────────
+// ── GET /api/chat/messages — user fetches their own conversation history ──────
 router.get("/messages", requireAuth, msgLimiter, async (req, res) => {
   const userId = req.userId!;
   const page = Math.max(1, Number(req.query.page) || 1);
@@ -63,7 +64,7 @@ router.get("/messages", requireAuth, msgLimiter, async (req, res) => {
     return;
   }
 
-  // Mark unread admin messages as read when user fetches
+  // Mark unread admin→user messages as read
   const unreadIds = (data ?? [])
     .filter((m) => m.sender === "admin" && !m.is_read)
     .map((m) => m.id);
@@ -75,10 +76,16 @@ router.get("/messages", requireAuth, msgLimiter, async (req, res) => {
       .in("id", unreadIds);
   }
 
-  res.json({ data: data ?? [], total: count ?? 0, page, pageSize, hasMore: (count ?? 0) > page * pageSize });
+  res.json({
+    data: data ?? [],
+    total: count ?? 0,
+    page,
+    pageSize,
+    hasMore: (count ?? 0) > page * pageSize,
+  });
 });
 
-// ── PATCH /api/chat/messages/:id/read — mark a message as read ───────────────
+// ── PATCH /api/chat/messages/:id/read — mark a single message as read ────────
 router.patch("/messages/:id/read", requireAuth, msgLimiter, async (req, res) => {
   const userId = req.userId!;
   const { id } = req.params;
@@ -97,7 +104,7 @@ router.patch("/messages/:id/read", requireAuth, msgLimiter, async (req, res) => 
   res.json({ success: true });
 });
 
-// ── GET /api/chat/unread-count ────────────────────────────────────────────────
+// ── GET /api/chat/unread-count — how many unread admin replies the user has ───
 router.get("/unread-count", requireAuth, async (req, res) => {
   const userId = req.userId!;
 
@@ -116,32 +123,126 @@ router.get("/unread-count", requireAuth, async (req, res) => {
   res.json({ count: count ?? 0 });
 });
 
-// ── Admin: GET /api/chat/admin/conversations — list users with messages ───────
+// ─────────────────────────────────────────────────────────────────────────────
+// ADMIN ROUTES
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── GET /api/chat/admin/conversations — list all users who have sent messages ─
 router.get("/admin/conversations", requireAdmin, async (req, res) => {
+  // Fetch all messages ordered newest first
   const { data, error } = await supabaseAdmin
     .from("chat_messages")
-    .select("user_id, created_at, message, sender,is_read")
+    .select("user_id, created_at, message, sender, is_read")
     .order("created_at", { ascending: false });
 
   if (error) {
+    logger.error({ error }, "Failed to fetch conversations");
     res.status(500).json({ error: "Failed to fetch conversations" });
     return;
   }
 
-  const byUser = new Map<string, { user_id: string; last_message: string; last_at: string; unread: number }>();
+  // Build per-user conversation summary
+  const byUser = new Map<
+    string,
+    { user_id: string; last_message: string; last_at: string; unread: number }
+  >();
+
   for (const row of data ?? []) {
     if (!byUser.has(row.user_id)) {
-      byUser.set(row.user_id, { user_id: row.user_id, last_message: row.message, last_at: row.created_at, unread: 0 });
+      // First row for this user = most recent message (since ordered desc)
+      byUser.set(row.user_id, {
+        user_id: row.user_id,
+        last_message: row.message,
+        last_at: row.created_at,
+        unread: 0,
+      });
     }
+    // Count unread = user messages that admin hasn't read yet
     if (row.sender === "user" && !row.is_read) {
       byUser.get(row.user_id)!.unread += 1;
     }
   }
 
-  res.json({ conversations: [...byUser.values()] });
+  // Optionally enrich with emails from auth.users
+  const userIds = [...byUser.keys()];
+  const emailMap = new Map<string, string>();
+
+  if (userIds.length > 0) {
+    try {
+      // Supabase admin.listUsers returns paginated results
+      const { data: usersData } = await supabaseAdmin.auth.admin.listUsers({
+        perPage: 1000,
+      });
+      for (const u of usersData?.users ?? []) {
+        if (u.email && byUser.has(u.id)) {
+          emailMap.set(u.id, u.email);
+        }
+      }
+    } catch (e) {
+      logger.warn({ e }, "Could not enrich conversations with emails");
+    }
+  }
+
+  const conversations = [...byUser.values()].map((c) => ({
+    ...c,
+    email: emailMap.get(c.user_id) ?? null,
+  }));
+
+  res.json({ conversations });
 });
 
-// ── Admin: POST /api/chat/admin/reply — admin replies to a user ───────────────
+// ── GET /api/chat/admin/messages/:userId — fetch a specific user's messages ───
+// THIS WAS THE MISSING ROUTE causing "No messages yet" in the admin panel
+router.get("/admin/messages/:userId", requireAdmin, async (req, res) => {
+  const { userId } = req.params;
+  const pageSize = Math.min(100, Number(req.query.pageSize) || 50);
+  const page = Math.max(1, Number(req.query.page) || 1);
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
+
+  const { data, error, count } = await supabaseAdmin
+    .from("chat_messages")
+    .select("*", { count: "exact" })
+    .eq("user_id", userId)
+    .order("created_at", { ascending: true })
+    .range(from, to);
+
+  if (error) {
+    logger.error({ error }, "Failed to fetch user messages for admin");
+    res.status(500).json({ error: "Failed to fetch messages" });
+    return;
+  }
+
+  res.json({
+    data: data ?? [],
+    total: count ?? 0,
+    page,
+    pageSize,
+    hasMore: (count ?? 0) > page * pageSize,
+  });
+});
+
+// ── POST /api/chat/admin/mark-read/:userId — clear unread for a conversation ──
+router.post("/admin/mark-read/:userId", requireAdmin, async (req, res) => {
+  const { userId } = req.params;
+
+  const { error } = await supabaseAdmin
+    .from("chat_messages")
+    .update({ is_read: true })
+    .eq("user_id", userId)
+    .eq("sender", "user")
+    .eq("is_read", false);
+
+  if (error) {
+    logger.error({ error }, "Failed to mark messages as read");
+    res.status(500).json({ error: "Failed to mark as read" });
+    return;
+  }
+
+  res.json({ success: true });
+});
+
+// ── POST /api/chat/admin/reply — admin replies to a user ─────────────────────
 const AdminReplySchema = z.object({
   userId: z.string().uuid(),
   message: z.string().min(1).max(2000),
@@ -168,13 +269,16 @@ router.post("/admin/reply", requireAdmin, msgLimiter, async (req, res) => {
     return;
   }
 
-  // Create a notification for the user
-  await supabaseAdmin.from("notifications").insert({
-    user_id: userId,
-    title: "Support reply",
-    message: message.slice(0, 120),
-    type: "info",
-  }).select();
+  // Notify the user
+  await supabaseAdmin
+    .from("notifications")
+    .insert({
+      user_id: userId,
+      title: "Support reply",
+      message: message.slice(0, 120),
+      type: "info",
+    })
+    .select();
 
   res.status(201).json(data);
 });

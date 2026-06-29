@@ -125,7 +125,14 @@ export default function AdminAnnouncementsPage() {
       setDialogOpen(false)
       setForm(defaultForm)
     },
-    onError: () => toast.error('Failed to create announcement'),
+    onError: (error: any) => {
+      console.log(error)
+      console.log("Message:", error.message)
+      console.log("Code:", error.code)
+      console.log("Details:", error.details)
+      console.log("Hint:", error.hint)
+      toast.error('Failed to create announcement')
+    }
   })
 
   const updateMutation = useMutation({

@@ -6,6 +6,7 @@ async function checkIsAdmin(userId: string): Promise<boolean> {
   const adminEmails = process.env.ADMIN_EMAILS
     ? process.env.ADMIN_EMAILS.split(",").map((e) => e.trim().toLowerCase())
     : [];
+  logger.info({ adminEmails })
 
   try {
     const { data: { user }, error } = await supabaseAdmin.auth.admin.getUserById(userId);

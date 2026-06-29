@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Link, NavLink, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { LayoutDashboard, Wallet, Receipt, Gift, Bell, User, Settings, ChevronLeft, ChevronRight, Shield, ChartBar as BarChart3, Users, Zap, Megaphone, CreditCard, Menu, X, MessageCircle } from 'lucide-react'
+import { LayoutDashboard, Wallet, Receipt, Gift, Bell, User, Settings, ChevronLeft, ChevronRight, Shield, ChartBar as BarChart3, Users, Megaphone, CreditCard, Menu, X, MessageCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ROUTES, APP_NAME } from '@/lib/constants'
 import { useAdmin } from '@/hooks/useAdmin'
