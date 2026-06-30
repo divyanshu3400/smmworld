@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Menu, X, Zap, Sun, Moon } from 'lucide-react'
 import { APP_NAME } from '@/lib/constants'
 import { useTheme } from '@/contexts/ThemeContext'
+import { useAuth } from '@/hooks/useAuth'
 
 const navigation = [
   { name: 'Home', href: '/' },
@@ -20,6 +21,7 @@ export default function PublicNavbar() {
   const location = useLocation()
   const isHome = location.pathname === '/'
   const { theme, toggleTheme } = useTheme()
+  const { user } = useAuth()
 
   return (
     <header className={`sticky top-0 z-50 w-full backdrop-blur-lg transition-colors ${isHome ? 'bg-background/80' : 'bg-background border-b border-border'}`}>
@@ -61,18 +63,29 @@ export default function PublicNavbar() {
               {theme === 'dark' ? <Sun className="h-4.5 w-4.5" /> : <Moon className="h-4.5 w-4.5" />}
             </button>
 
-            <Link
-              to="/login"
-              className="px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-            >
-              Log in
-            </Link>
-            <Link
-              to="/signup"
-              className="px-5 py-2.5 text-sm font-semibold text-white bg-emerald-500 rounded-full hover:bg-emerald-600 transition-colors shadow-md shadow-emerald-500/25"
-            >
-              Get Started
-            </Link>
+            {user ? (
+              <Link
+                to="/dashboard"
+                className="px-5 py-2.5 text-sm font-semibold text-white bg-emerald-500 rounded-full hover:bg-emerald-600 transition-colors shadow-md shadow-emerald-500/25"
+              >
+                Dashboard
+              </Link>
+            ) : (
+              <>
+                <Link
+                  to="/login"
+                  className="px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Log in
+                </Link>
+                <Link
+                  to="/signup"
+                  className="px-5 py-2.5 text-sm font-semibold text-white bg-emerald-500 rounded-full hover:bg-emerald-600 transition-colors shadow-md shadow-emerald-500/25"
+                >
+                  Get Started
+                </Link>
+              </>
+            )}
           </div>
 
           {/* Mobile: theme toggle + hamburger */}
@@ -118,28 +131,33 @@ export default function PublicNavbar() {
                     {item.name}
                   </Link>
                 ))}
-                <Link
-                  to="/contact"
-                  className="block px-3 py-2.5 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors"
-                  onClick={() => setMobileMenuOpen(false)}
-                >
-                  Contact
-                </Link>
                 <div className="pt-3 space-y-2 border-t border-border mt-3">
-                  <Link
-                    to="/login"
-                    className="block w-full px-3 py-2.5 text-center text-sm font-medium text-foreground hover:bg-accent rounded-lg transition-colors"
-                    onClick={() => setMobileMenuOpen(false)}
-                  >
-                    Log in
-                  </Link>
-                  <Link
-                    to="/signup"
-                    className="block w-full px-3 py-3 text-center text-sm font-semibold text-white bg-emerald-500 rounded-xl hover:bg-emerald-600 transition-colors"
-                    onClick={() => setMobileMenuOpen(false)}
-                  >
-                    Get Started Free
-                  </Link>
+                  {user ? (
+                    <Link
+                      to="/dashboard"
+                      className="block w-full px-3 py-3 text-center text-sm font-semibold text-white bg-emerald-500 rounded-xl hover:bg-emerald-600 transition-colors"
+                      onClick={() => setMobileMenuOpen(false)}
+                    >
+                      Dashboard
+                    </Link>
+                  ) : (
+                    <>
+                      <Link
+                        to="/login"
+                        className="block w-full px-3 py-2.5 text-center text-sm font-medium text-foreground hover:bg-accent rounded-lg transition-colors"
+                        onClick={() => setMobileMenuOpen(false)}
+                      >
+                        Log in
+                      </Link>
+                      <Link
+                        to="/signup"
+                        className="block w-full px-3 py-3 text-center text-sm font-semibold text-white bg-emerald-500 rounded-xl hover:bg-emerald-600 transition-colors"
+                        onClick={() => setMobileMenuOpen(false)}
+                      >
+                        Get Started Free
+                      </Link>
+                    </>
+                  )}
                 </div>
               </div>
             </motion.div>

@@ -64,6 +64,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [user?.id])
 
+  // Initialize auth state - set initialized immediately after getSession, before profile fetch
   useEffect(() => {
     let mounted = true
 
@@ -75,15 +76,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (!mounted) return
 
+        // Set initialized FIRST, before any async profile fetching
+        // This prevents PublicRoute from getting stuck in loading state
+        setLoading(false)
+        setInitialized(true)
+
         if (currentSession) {
           setSession(currentSession)
           setUser(currentSession.user)
-          const profileData = await getProfile(currentSession.user.id)
-          setProfile(profileData)
+          // Profile fetch happens asynchronously after initialized is true
+          getProfile(currentSession.user.id).then((profileData) => {
+            if (mounted) setProfile(profileData)
+          }).catch((err) => {
+            console.error('Failed to fetch profile:', err)
+          })
         }
       } catch (err) {
         console.error('Auth initialization error:', err)
-      } finally {
         if (mounted) {
           setLoading(false)
           setInitialized(true)
@@ -93,18 +102,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     initializeAuth()
 
+    // onAuthStateChange callback must be SYNCHRONOUS per Supabase docs
+    // Async callbacks cause race conditions with state updates
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, newSession) => {
+    } = supabase.auth.onAuthStateChange((event, newSession) => {
       if (!mounted) return
 
       if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
         setSession(newSession)
         setUser(newSession?.user ?? null)
-        if (newSession?.user) {
-          const profileData = await getProfile(newSession.user.id)
-          setProfile(profileData)
-        }
+        // Profile fetch handled by separate effect below
       } else if (event === 'SIGNED_OUT') {
         setSession(null)
         setUser(null)
@@ -117,6 +125,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       subscription.unsubscribe()
     }
   }, [])
+
+  // Fetch profile when user changes (separate from auth initialization)
+  useEffect(() => {
+    if (!user?.id) return
+
+    let mounted = true
+    getProfile(user.id).then((profileData) => {
+      if (mounted) setProfile(profileData)
+    }).catch((err) => {
+      console.error('Failed to fetch profile:', err)
+    })
+
+    return () => {
+      mounted = false
+    }
+  }, [user?.id])
 
   const login = useCallback(async (credentials: LoginCredentials) => {
     setLoading(true)
