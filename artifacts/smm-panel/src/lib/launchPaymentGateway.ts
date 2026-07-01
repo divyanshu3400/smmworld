@@ -8,7 +8,7 @@ export interface CreateOrderResponse {
   amountINR: number
 }
 
-export type PaymentFlow = 'wallet_topup' | 'public_order'
+export type PaymentFlow = 'wallet_topup' | 'public_order' | 'guest_order'
 
 export interface CreateOrderOptions {
   amountINR: number

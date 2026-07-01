@@ -1,6 +1,7 @@
 import { supabaseAdmin } from "../lib/supabaseAdmin";
 import { logger } from "../lib/logger";
 import { submitOrder } from "../services/smmService";
+import { computeCurrentPriceINR as computePrice } from "../lib/pricing";
 
 interface PlaceOrderInput {
     serviceId: string;
@@ -22,7 +23,7 @@ export async function placeOrderForUser(userId: string, input: PlaceOrderInput) 
 
     // 1. Recompute price server-side from current rates — never trust a
     //    price that was calculated client-side or minutes ago.
-    const priceINR = await computeCurrentPriceINR(serviceId, quantity, platform);
+    const { priceINR } = await computePrice(serviceId, quantity, platform);
 
     // 2. Check + debit wallet atomically
     const { data: wallet } = await supabaseAdmin
@@ -87,10 +88,4 @@ export async function placeOrderForUser(userId: string, input: PlaceOrderInput) 
 
         throw new Error("Order could not be placed with provider — refunded");
     }
-}
-
-async function computeCurrentPriceINR(serviceId: string, quantity: number, platform: string): Promise<number> {
-    // Reuse the exact same computeSellRateInr + rate/markup lookup from your
-    // /services and /services/:id routes so pricing never diverges.
-    throw new Error("computeCurrentPriceINR not implemented — wire to your existing pricing logic");
 }

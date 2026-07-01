@@ -398,9 +398,8 @@ router.post("/verify", requireAuth, async (req, res) => {
 
 // ── POST /api/payment/verify-public ───────────────────────────────────────────
 // Public endpoint for the PaymentReturnPage to verify payments without auth.
-// Uses orderId (UUID, hard to guess) for verification. Only works for orders
-// that haven't been paid yet. Does NOT credit wallet for guest orders - that
-// is handled by the webhook.
+// Uses orderId (UUID, hard to guess) for verification. Handles both wallet topup
+// and guest_order purposes - for guest orders, places the SMM order after payment.
 router.post("/verify-public", async (req, res) => {
   const { orderId } = req.body as { orderId?: string };
 
@@ -478,31 +477,87 @@ router.post("/verify-public", async (req, res) => {
 
     const amountINR = Number(order.amount_inr);
     const userId = order.user_id;
+    const isGuestOrder = order.purpose === "guest_order";
+
+    // For guest orders: determine fee handling
+    let netCreditINR = amountINR;
+    let feeNote = "";
+
+    if (isGuestOrder) {
+      // Guest order: fee is priced into the service rate — no additional deduction
+      feeNote = "Payment for order";
+    } else {
+      // Wallet topup: deduct gateway fee if configured
+      const { data: platformSettings } = await supabaseAdmin
+        .from("platform_settings")
+        .select("cashfree_fee_percent")
+        .eq("id", 1)
+        .maybeSingle();
+
+      const feePercent = Number(platformSettings?.cashfree_fee_percent ?? 0);
+      const feeAmountINR = amountINR * (feePercent / 100);
+      netCreditINR = amountINR - feeAmountINR;
+      feeNote = feePercent > 0
+        ? ` (Gateway fee ${feePercent}%: ₹${feeAmountINR.toFixed(2)} deducted from ₹${amountINR.toFixed(2)})`
+        : "";
+    }
 
     // Credit the wallet
     const { newBalance, duplicate, currency: walletCurrency } = await creditWallet(
       userId,
-      amountINR,
+      netCreditINR,
       "INR",
       order.provider as ProviderKey,
-      status.providerPaymentId || order.provider_order_id
+      status.providerPaymentId || order.provider_order_id,
+      isGuestOrder ? "Payment for order" : `Wallet top-up${feeNote}`
     );
 
-    // Mark the order paid.
+    // Mark the order paid
     await supabaseAdmin
       .from("payment_orders")
       .update({
         status: "paid",
         provider_payment_id: status.providerPaymentId,
-        amount_usd: walletCurrency === "INR" ? null : amountINR,
+        amount_usd: walletCurrency === "INR" ? null : netCreditINR,
         paid_at: new Date().toISOString(),
       })
       .eq("id", orderId);
 
     logger.info(
-      { userId, orderId, provider: order.provider, amountINR, walletCurrency, duplicate },
+      { userId, orderId, provider: order.provider, amountINR, netCreditINR, walletCurrency, duplicate, purpose: order.purpose },
       "Wallet credited via public verify"
     );
+
+    // For guest orders: place the SMM order now that funds have landed
+    if (isGuestOrder && order.metadata) {
+      const meta = order.metadata as {
+        serviceId: string;
+        serviceName: string;
+        platform: string;
+        link: string;
+        quantity: number;
+        isExistingAccount: boolean;
+      };
+
+      try {
+        const { placeOrderForUser } = await import("./orderHelpers");
+        await placeOrderForUser(userId, {
+          serviceId: meta.serviceId,
+          serviceName: meta.serviceName,
+          platform: meta.platform,
+          link: meta.link,
+          quantity: meta.quantity,
+        });
+
+        logger.info({ userId, orderId }, "Public verify: guest order placed successfully");
+      } catch (placeErr) {
+        logger.error(
+          { err: placeErr, userId, orderId },
+          "Public verify: guest order placement FAILED after payment — needs manual fulfillment"
+        );
+        // Don't fail the response - payment was successful, order fulfillment can be retried
+      }
+    }
 
     return res.json({
       success: true,

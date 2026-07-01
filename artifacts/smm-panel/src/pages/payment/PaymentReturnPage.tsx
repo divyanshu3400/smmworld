@@ -7,7 +7,7 @@ import { getCurrencySymbol, type CurrencyCode } from '@/lib/currency'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 
-type PaymentFlow = 'wallet_topup' | 'public_order'
+type PaymentFlow = 'wallet_topup' | 'public_order' | 'guest_order'
 
 export default function PaymentReturnPage() {
   const navigate = useNavigate()
@@ -99,7 +99,7 @@ export default function PaymentReturnPage() {
                         {currencySymbol}{result?.amountINR?.toFixed(2) || '0'} has been added to your wallet.
                       </>
                     )}
-                    {flow === 'public_order' && (
+                    {(flow === 'public_order' || flow === 'guest_order') && (
                       <>
                         Your order has been placed and will be processed shortly.
                       </>
@@ -125,7 +125,7 @@ export default function PaymentReturnPage() {
 
                 <Button onClick={handleContinue} className="w-full bg-emerald-500 hover:bg-emerald-600 mt-2">
                   {flow === 'wallet_topup' && (returnTo ? 'Continue' : 'Go to Wallet')}
-                  {flow === 'public_order' && 'View Orders'}
+                  {(flow === 'public_order' || flow === 'guest_order') && 'View Orders'}
                 </Button>
               </div>
             )}
@@ -157,7 +157,7 @@ export default function PaymentReturnPage() {
 
         <p className="text-center text-xs text-muted-foreground mt-4">
           {flow === 'wallet_topup' && 'Wallet Top-up'}
-          {flow === 'public_order' && 'Order Payment'}
+          {(flow === 'public_order' || flow === 'guest_order') && 'Order Payment'}
           {orderId && <span className="block mt-1">Order: {orderId.slice(0, 8)}...</span>}
         </p>
       </motion.div>

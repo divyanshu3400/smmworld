@@ -142,6 +142,8 @@ router.post("/checkout", generalLimiter, async (req, res) => {
                     customerId: userId,
                     customerEmail: normalizedEmail,
                     orderId,
+                    flow: "guest_order",
+                    returnTo: "/orders",
                 });
 
                 await supabaseAdmin

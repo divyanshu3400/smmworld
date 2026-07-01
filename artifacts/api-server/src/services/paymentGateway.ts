@@ -26,7 +26,7 @@ export interface CreateOrderInput {
   customerEmail: string;
   customerPhone?: string;
   orderId: string; // our internal payment_orders.id
-  flow?: 'wallet_topup' | 'public_order';
+  flow?: 'wallet_topup' | 'public_order' | 'guest_order';
   returnTo?: string;
 }
 
