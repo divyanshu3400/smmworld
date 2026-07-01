@@ -41,6 +41,7 @@ import {
 import { toast } from 'sonner'
 import { TRANSACTION_TYPES } from '@/lib/constants'
 import { supabase } from '@/lib/supabase'
+import { CreateOrderResponse, launchPaymentGateway } from '@/lib/launchPaymentGateway'
 
 declare global {
   interface Window {
@@ -87,15 +88,6 @@ async function getAuthToken(): Promise<string> {
   return data.session?.access_token || ''
 }
 
-interface CreateOrderResponse {
-  orderId: string
-  provider: string
-  providerOrderId: string
-  sessionId?: string
-  redirectUrl?: string
-  redirectParams?: Record<string, string>
-  amountINR: number
-}
 
 async function createGatewayOrder(amountINR: number): Promise<CreateOrderResponse> {
   const token = await getAuthToken()
@@ -144,28 +136,6 @@ async function pollOrderStatus(orderId: string): Promise<string> {
   return data.status
 }
 
-function loadRazorpayScript(): Promise<boolean> {
-  return new Promise((resolve) => {
-    if (window.Razorpay) return resolve(true)
-    const s = document.createElement('script')
-    s.src = 'https://checkout.razorpay.com/v1/checkout.js'
-    s.onload = () => resolve(true)
-    s.onerror = () => resolve(false)
-    document.body.appendChild(s)
-  })
-}
-
-async function loadCashfreeScript(): Promise<boolean> {
-  if (window.Cashfree) return true
-  return new Promise((resolve) => {
-    const script = document.createElement('script')
-    // Make sure this is v3
-    script.src = 'https://sdk.cashfree.com/js/v3/cashfree.js'
-    script.onload = () => resolve(true)
-    script.onerror = () => resolve(false)
-    document.body.appendChild(script)
-  })
-}
 type PaymentState = 'idle' | 'creating' | 'waiting' | 'verifying' | 'done' | 'failed'
 
 export default function WalletPage() {
@@ -176,6 +146,7 @@ export default function WalletPage() {
   const [page, setPage] = useState(1)
   const [type, setType] = useState<string>('all')
   const pageSize = 10
+  const [pendingReturnTo, setPendingReturnTo] = useState<string | null>(null)
 
   const [addFundsOpen, setAddFundsOpen] = useState(false)
   const [amountINR, setAmountINR] = useState('')
@@ -205,38 +176,52 @@ export default function WalletPage() {
   })
 
   useEffect(() => {
-    loadRazorpayScript()
-    loadCashfreeScript()
-  }, [])
-  // Auto-verify when returning from Cashfree redirect
-  useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const orderId = params.get('order_id')
-    if (!orderId) return
+    const topup = params.get('topup')
+    const returnTo = params.get('returnTo')
 
-    // Clean the URL immediately
-    window.history.replaceState({}, '', '/wallet')
+    // Case 1: returning from a gateway redirect (existing behavior, unchanged)
+    if (orderId) {
+      window.history.replaceState({}, '', '/wallet')
 
-    setAddFundsOpen(true)
-    setActiveOrderId(orderId)
-    setPaymentState('verifying')
+      setAddFundsOpen(true)
+      setActiveOrderId(orderId)
+      setPaymentState('verifying')
 
-    verifyGatewayPayment(orderId).then((result) => {
-      if (result.success) {
-        setPaymentState('done')
-        toast.success(`${currencySymbol}${result.amountINR} added successfully! Wallet credited.`)
-        queryClient.invalidateQueries({ queryKey: ['wallet'] })
-        queryClient.invalidateQueries({ queryKey: ['transactions'] })
-      } else {
+      verifyGatewayPayment(orderId).then((result) => {
+        if (result.success) {
+          setPaymentState('done')
+          toast.success(`${currencySymbol}${result.amountINR} added successfully! Wallet credited.`)
+          queryClient.invalidateQueries({ queryKey: ['wallet'] })
+          queryClient.invalidateQueries({ queryKey: ['transactions'] })
+        } else {
+          setPaymentState('waiting')
+          setActiveOrderId(orderId)
+          setStatusMessage(result.message || 'Payment not confirmed yet. Click verify if you have paid.')
+        }
+      }).catch(() => {
         setPaymentState('waiting')
         setActiveOrderId(orderId)
-        setStatusMessage(result.message || 'Payment not confirmed yet. Click verify if you have paid.')
+        setStatusMessage('Could not verify automatically. Click verify if you have paid.')
+      })
+      return
+    }
+
+    // Case 2: arrived here to top up before continuing an order elsewhere
+    if (topup) {
+      window.history.replaceState({}, '', '/wallet')
+
+      const amount = Math.max(1, Math.ceil(Number(topup)))
+      if (!isNaN(amount)) {
+        setAmountINR(String(amount))
       }
-    }).catch(() => {
-      setPaymentState('waiting')
-      setActiveOrderId(orderId)
-      setStatusMessage('Could not verify automatically. Click verify if you have paid.')
-    })
+      if (returnTo) {
+        setPendingReturnTo(decodeURIComponent(returnTo))
+      }
+      setAddFundsOpen(true)
+      setPaymentState('idle')
+    }
   }, [])
 
   useEffect(() => {
@@ -274,14 +259,21 @@ export default function WalletPage() {
     }
   }, [paymentState, activeOrderId, queryClient])
 
-  const resetDialog = () => {
+  const resetDialog = (opts?: { skipReturn?: boolean }) => {
     setAddFundsOpen(false)
     setAmountINR('')
     setPaymentState('idle')
     setActiveOrderId(null)
     setStatusMessage('')
-  }
 
+    if (pendingReturnTo && !opts?.skipReturn) {
+      const dest = pendingReturnTo
+      setPendingReturnTo(null)
+      window.location.href = dest
+    } else {
+      setPendingReturnTo(null)
+    }
+  }
   const handleAddFunds = async () => {
     const amount = parseFloat(amountINR)
     if (!amount || amount < 1) {
@@ -304,60 +296,20 @@ export default function WalletPage() {
     setStatusMessage('')
 
     try {
-      const order = await createGatewayOrder(amount);
-      console.log("Backend Order Response Summary:", order);
-      if (order.provider === 'cashfree' && order.sessionId) {
-        const loaded = await loadCashfreeScript()
-        if (!loaded || !window.Cashfree) {
-          throw new Error('Could not load Cashfree checkout.')
-        }
-        // 1. Force a strict fallback check for Vite's environment variable string
-        const rawMode = import.meta.env.VITE_CASHFREE_MODE;
-        const cashfreeMode = (rawMode === 'production' ? 'production' : 'sandbox');
-        console.log("Initializing Cashfree SDK in mode:", cashfreeMode);
-        const cf = window.Cashfree({ mode: cashfreeMode })
-        setActiveOrderId(order.orderId)
-        setPaymentState('waiting')
-        setStatusMessage('Complete the payment in the Cashfree window. Your wallet will be credited automatically once confirmed.')
-        cf.checkout({
-          paymentSessionId: order.sessionId,
-          redirectTarget: '_self',
-        })
-      } else if (order.provider === 'payu' && order.redirectUrl && order.redirectParams) {
-        // PayU — redirect via form POST. Works on desktop + mobile.
-        setActiveOrderId(order.orderId)
-        setPaymentState('waiting')
-        setStatusMessage('You will be redirected to PayU. After paying, you will return here and your wallet will be credited.')
-        const form = document.createElement('form')
-        form.method = 'POST'
-        form.action = order.redirectUrl
-        for (const [key, value] of Object.entries(order.redirectParams)) {
-          const input = document.createElement('input')
-          input.type = 'hidden'
-          input.name = key
-          input.value = value
-          form.appendChild(input)
-        }
-        document.body.appendChild(form)
-        form.submit()
-      } else if (order.provider === 'razorpay') {
-        // Legacy Razorpay path — kept for when admin re-enables it.
-        const loaded = await loadRazorpayScript()
-        if (!loaded) throw new Error('Could not load Razorpay checkout.')
-        setActiveOrderId(order.orderId)
-        setPaymentState('waiting')
-        // Razorpay verify happens in its own handler; for the unified flow we
-        // poll the order status the same way.
-      } else {
-        throw new Error('Unsupported payment provider')
-      }
+      const order = await createGatewayOrder(amount)
+      await launchPaymentGateway(order, {
+        onOrderCreated: (orderId) => setActiveOrderId(orderId),
+        onWaiting: (message) => {
+          setPaymentState('waiting')
+          setStatusMessage(message)
+        },
+      })
     } catch (err) {
       setPaymentState('failed')
       setStatusMessage(err instanceof Error ? err.message : 'Failed to initiate payment')
       toast.error(err instanceof Error ? err.message : 'Failed to initiate payment')
     }
   }
-
   // Manual verify button (user clicks "I have paid" after returning from gateway).
   const handleVerify = async () => {
     if (!activeOrderId) return
@@ -764,9 +716,15 @@ export default function WalletPage() {
               </div>
               <div>
                 <p className="font-medium">Payment successful!</p>
-                <p className="text-sm text-muted-foreground mt-1">Your wallet has been credited.</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {pendingReturnTo
+                    ? 'Your wallet has been credited. Taking you back to finish your order…'
+                    : 'Your wallet has been credited.'}
+                </p>
               </div>
-              <Button onClick={resetDialog} className="bg-emerald-500 hover:bg-emerald-600">Done</Button>
+              <Button onClick={() => resetDialog()} className="bg-emerald-500 hover:bg-emerald-600">
+                {pendingReturnTo ? 'Continue Order' : 'Done'}
+              </Button>
             </div>
           )}
 
@@ -789,7 +747,7 @@ export default function WalletPage() {
 
           {paymentState === 'idle' && (
             <DialogFooter>
-              <Button variant="outline" onClick={resetDialog} disabled={paymentState !== 'idle'}>
+              <Button variant="outline" onClick={() => resetDialog({ skipReturn: true })} disabled={paymentState !== 'idle'}>
                 Cancel
               </Button>
               <Button

@@ -11,7 +11,7 @@ import {
   fetchOrderStatus,
   cancelProviderOrder,
 } from "../services/smmService";
-import { calculatePricing, PLATFORM_MARKUP, round } from "../lib/pricing";
+import { calculatePricing, computeSellRateInr, PLATFORM_MARKUP, round } from "../lib/pricing";
 
 const router = Router();
 
@@ -23,7 +23,7 @@ const orderLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-const generalLimiter = rateLimit({
+export const generalLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 60,
   standardHeaders: true,
@@ -109,6 +109,77 @@ router.get("/services", generalLimiter, async (req, res) => {
   } catch (err) {
     logger.error({ err }, "Failed to fetch SMM services");
     return res.status(502).json({ error: "Failed to fetch services" });
+  }
+});
+
+router.get("/services/:serviceId", generalLimiter, async (req, res) => {
+  try {
+    const { serviceId } = req.params;
+    const { platform } = req.query;
+
+    if (!serviceId || typeof serviceId !== "string") {
+      return res.status(400).json({ error: "Invalid serviceId" });
+    }
+
+    const [serviceResult, settingsResult, rateResult] = await Promise.all([
+      supabaseAdmin
+        .from("smm_services_cache")
+        .select("*")
+        .eq("service_id", serviceId)
+        .maybeSingle(),
+      supabaseAdmin
+        .from("platform_settings")
+        .select("markup_percent, cashfree_fee_percent, quantity_factor, min_order_charge_inr")
+        .eq("id", 1)
+        .maybeSingle(),
+      supabaseAdmin
+        .from("exchange_rates")
+        .select("rate")
+        .eq("base_currency", "USD")
+        .eq("target_currency", "INR")
+        .maybeSingle(),
+    ]);
+
+    if (serviceResult.error) {
+      logger.error({ error: serviceResult.error, serviceId }, "Failed to fetch service");
+      return res.status(500).json({ error: "Failed to fetch service" });
+    }
+
+    const s = serviceResult.data;
+    if (!s) {
+      return res.status(404).json({ error: "Service not found or no longer available" });
+    }
+
+    const markupPercent = Number(settingsResult.data?.markup_percent ?? 20);
+    const cashfreeFeePercent = Number(settingsResult.data?.cashfree_fee_percent ?? 2);
+    const usdToInr = Number(rateResult.data?.rate ?? 94.44);
+
+    const platformKey = (typeof platform === "string" ? platform : "default").toLowerCase();
+    const platformMultiplier = PLATFORM_MARKUP[platformKey] ?? PLATFORM_MARKUP["default"]!;
+
+    const sellRateInr = computeSellRateInr({
+      providerRateUsd: Number(s.provider_rate),
+      markupPercent,
+      cashfreeFeePercent,
+      usdToInr,
+      platformMultiplier,
+    });
+
+    return res.json({
+      service: {
+        service: s.service_id,
+        name: s.name,
+        type: s.type,
+        category: s.category,
+        description: s.description,
+        min: s.min,
+        max: s.max,
+        rate: sellRateInr,
+      },
+    });
+  } catch (err) {
+    logger.error({ err, serviceId: req.params.serviceId }, "Failed to fetch SMM service");
+    return res.status(502).json({ error: "Failed to fetch service" });
   }
 });
 
@@ -423,24 +494,6 @@ router.post("/order", requireAuth, orderLimiter, async (req, res) => {
   }
 });
 
-// Temporary debug route — remove after testing
-router.get("/debug/pricing", async (req, res) => {
-  const {
-    rate = "0.0014",
-    quantity = "1000",
-    currency = "INR",
-    platform = "instagram",
-  } = req.query;
-
-  const pricing = await calculatePricing(
-    Number(rate),
-    Number(quantity),
-    String(currency),
-    String(platform),
-  );
-
-  return res.json(pricing);
-});
 // ── GET /api/smm/order/:id ───────────────────────────────────────────────────
 router.get("/order/:id", requireAuth, generalLimiter, async (req, res) => {
   const userId = req.userId!;
@@ -485,6 +538,7 @@ router.get("/order/:id", requireAuth, generalLimiter, async (req, res) => {
 });
 
 // ── POST /api/smm/cancel ─────────────────────────────────────────────────────
+// ── POST /api/smm/cancel ─────────────────────────────────────────────────────
 const CancelSchema = z.object({ orderId: z.string().uuid() });
 
 router.post("/cancel", requireAuth, orderLimiter, async (req, res) => {
@@ -515,45 +569,75 @@ router.post("/cancel", requireAuth, orderLimiter, async (req, res) => {
     return;
   }
 
-  // Attempt provider cancellation
+  // Attempt provider cancellation first — if the provider rejects it
+  // (already started/completed upstream), don't touch local state or refund.
   if (order.external_order_id) {
-    await cancelProviderOrder(order.external_order_id);
+    try {
+      await cancelProviderOrder(order.external_order_id);
+    } catch (err) {
+      logger.error({ err, orderId, userId }, "Provider rejected cancellation");
+      res.status(409).json({ error: "Order could not be cancelled — it may have already started" });
+      return;
+    }
   }
 
-  // Update local status
-  await supabaseAdmin
+  // Update local status. Guard with .eq("status", order.status) so a
+  // concurrent request (double-click, retry, webhook) can't both succeed
+  // and both refund — only the first write actually matches a row.
+  const { data: updatedRows, error: updateErr } = await supabaseAdmin
     .from("orders")
     .update({
       status: "cancelled",
       completed_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     })
-    .eq("id", orderId);
+    .eq("id", orderId)
+    .eq("status", order.status)
+    .select("id");
 
-  // Refund wallet
+  if (updateErr) {
+    logger.error({ err: updateErr, orderId, userId }, "Failed to update order status");
+    res.status(500).json({ error: "Failed to cancel order" });
+    return;
+  }
+
+  if (!updatedRows || updatedRows.length === 0) {
+    // Someone else already changed this order's status between our read and write
+    res.status(409).json({ error: "Order status changed — please refresh and try again" });
+    return;
+  }
+
+  // Refund wallet atomically
   if (order.price_usd) {
     const { data: wallet } = await supabaseAdmin
       .from("wallets")
-      .select("id, balance")
+      .select("id")
       .eq("user_id", userId)
       .single();
 
     if (wallet) {
-      const refundBalance = wallet.balance + order.price_usd;
-      await supabaseAdmin
-        .from("wallets")
-        .update({ balance: refundBalance, updated_at: new Date().toISOString() })
-        .eq("id", wallet.id);
+      const { data: newBalance, error: rpcErr } = await supabaseAdmin.rpc(
+        "increment_wallet_balance",
+        { p_wallet_id: wallet.id, p_amount: order.price_usd }
+      );
 
-      await supabaseAdmin.from("wallet_transactions").insert({
-        wallet_id: wallet.id,
-        user_id: userId,
-        type: "refund",
-        amount: order.price_usd,
-        description: `Refund for cancelled order`,
-        reference_id: orderId,
-        balance_after: refundBalance,
-      });
+      if (rpcErr) {
+        // Order is already marked cancelled at this point — log loudly so
+        // ops can manually reconcile rather than silently losing the refund.
+        logger.error({ err: rpcErr, orderId, userId, walletId: wallet.id }, "Refund failed after cancellation — needs manual reconciliation");
+      } else {
+        await supabaseAdmin.from("wallet_transactions").insert({
+          wallet_id: wallet.id,
+          user_id: userId,
+          type: "refund",
+          amount: order.price_usd,
+          description: `Refund for cancelled order`,
+          reference_id: orderId,
+          balance_after: newBalance,
+        });
+      }
+    } else {
+      logger.error({ orderId, userId }, "No wallet found for refund — needs manual reconciliation");
     }
   }
 

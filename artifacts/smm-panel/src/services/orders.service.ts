@@ -3,7 +3,6 @@ import { handleSupabaseError } from '@/lib/error-handler'
 import {
   createOrder as apiCreateOrder,
   syncOrderStatus as apiSyncOrderStatus,
-  cancelOrder as apiCancelOrder,
 } from './smm-api.service'
 import type { Database } from '@/types/database'
 import type { PaginatedResponse } from '@/types/api'
@@ -169,17 +168,4 @@ export async function getOrderStats(userId: string): Promise<{
   })
 
   return stats
-}
-
-export async function cancelOrder(
-  orderId: string,
-  _userId: string
-): Promise<{ success: boolean; error?: string }> {
-  try {
-    const token = await getToken()
-    return await apiCancelOrder(orderId, token)
-  } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : 'Unknown error'
-    return { success: false, error: errorMessage }
-  }
 }

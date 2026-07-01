@@ -95,7 +95,85 @@ export async function calculatePricing(
         platformMultiplier,
     };
 }
+interface PricingInputs {
+    providerRateUsd: number;
+    markupPercent: number;
+    cashfreeFeePercent: number;
+    usdToInr: number;
+    platformMultiplier: number;
+}
 
+export function computeSellRateInr({
+    providerRateUsd,
+    markupPercent,
+    cashfreeFeePercent,
+    usdToInr,
+    platformMultiplier,
+}: PricingInputs): number {
+    const markup = markupPercent / 100;
+    const cashfreeFee = cashfreeFeePercent / 100;
+
+    const providerRateInr = providerRateUsd * usdToInr;
+    const afterMarkup = providerRateInr * (1 + markup);
+    const sellRateInr = afterMarkup * (1 + cashfreeFee) * platformMultiplier;
+
+    return round(sellRateInr);
+}
 export function round(n: number, decimals = 4): number {
     return Number(n.toFixed(decimals));
+}
+export async function computeCurrentPriceINR(
+    serviceId: string,
+    quantity: number,
+    platform: string
+): Promise<{ priceINR: number; service: { name: string; min: number; max: number } }> {
+    const [serviceResult, settingsResult, rateResult] = await Promise.all([
+        supabaseAdmin
+            .from("smm_services_cache")
+            .select("*")
+            .eq("service_id", serviceId)
+            .maybeSingle(),
+        supabaseAdmin
+            .from("platform_settings")
+            .select("markup_percent, cashfree_fee_percent")
+            .eq("id", 1)
+            .maybeSingle(),
+        supabaseAdmin
+            .from("exchange_rates")
+            .select("rate")
+            .eq("base_currency", "USD")
+            .eq("target_currency", "INR")
+            .maybeSingle(),
+    ]);
+
+    const service = serviceResult.data;
+    if (!service) {
+        throw new Error("Service not found or no longer available");
+    }
+
+    if (quantity < service.min || quantity > service.max) {
+        throw new Error(`Quantity must be between ${service.min} and ${service.max}`);
+    }
+
+    const markupPercent = Number(settingsResult.data?.markup_percent ?? 20);
+    const cashfreeFeePercent = Number(settingsResult.data?.cashfree_fee_percent ?? 2);
+    const usdToInr = Number(rateResult.data?.rate ?? 94.44);
+
+    const platformKey = platform.toLowerCase();
+    const platformMultiplier = PLATFORM_MARKUP[platformKey] ?? PLATFORM_MARKUP["default"]!;
+
+    const ratePerThousand = computeSellRateInr({
+        providerRateUsd: Number(service.provider_rate),
+        markupPercent,
+        cashfreeFeePercent,
+        usdToInr,
+        platformMultiplier,
+    });
+
+    const priceINR = Number(((ratePerThousand * quantity) / 1000).toFixed(2));
+
+    return {
+        priceINR,
+        service: { name: service.name, min: service.min, max: service.max },
+    };
 }

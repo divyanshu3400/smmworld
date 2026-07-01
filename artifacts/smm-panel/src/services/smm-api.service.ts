@@ -1,11 +1,7 @@
-// All WorldOfSMM API calls now go through our secure backend.
-// The API key is NEVER present in frontend code.
-
 import { apiUrl } from '@/lib/api'
 
-const BASE = apiUrl("/api/smm");
-
-async function apiFetch<T>(
+async function baseFetch<T>(
+  base: string,
   path: string,
   options?: RequestInit,
   token?: string
@@ -16,7 +12,7 @@ async function apiFetch<T>(
   };
   if (token) headers["Authorization"] = `Bearer ${token}`;
 
-  const res = await fetch(`${BASE}${path}`, { ...options, headers });
+  const res = await fetch(`${base}${path}`, { ...options, headers });
   const data = await res.json();
 
   if (!res.ok) {
@@ -24,6 +20,24 @@ async function apiFetch<T>(
   }
   return data as T;
 }
+
+const SMM_BASE = apiUrl("/api/smm");
+export async function apiFetch<T>(
+  path: string,
+  options?: RequestInit,
+  token?: string
+): Promise<T> {
+  return baseFetch<T>(SMM_BASE, path, options, token);
+}
+
+const GUEST_BASE = apiUrl("/api");
+export async function guestApiFetch<T>(
+  path: string,
+  options?: RequestInit
+): Promise<T> {
+  return baseFetch<T>(GUEST_BASE, path, options);
+}
+
 
 export interface SMMService {
   service: number;
@@ -55,6 +69,25 @@ export interface GetServicesParams {
   search?: string;
   platform?: string;
 }
+export interface GuestCheckoutParams {
+  serviceId: string
+  serviceName: string
+  platform: string
+  link: string
+  quantity: number
+  email: string
+}
+
+export interface GuestCheckoutResult {
+  orderId: string
+  provider: 'cashfree' | 'payu' | 'razorpay'
+  providerOrderId: string
+  sessionId?: string
+  redirectUrl?: string
+  redirectParams?: Record<string, string>
+  amountINR: number
+  isExistingAccount: boolean
+}
 
 export async function getServices(params?: GetServicesParams): Promise<SMMService[]> {
   const query = new URLSearchParams();
@@ -67,12 +100,38 @@ export async function getServices(params?: GetServicesParams): Promise<SMMServic
   return data.services;
 }
 
+export async function getServiceById(
+  serviceId: string,
+  platform?: string
+): Promise<SMMService | null> {
+  const query = new URLSearchParams();
+  if (platform) query.set("platform", platform);
+
+  const path = query.toString()
+    ? `/services/${serviceId}?${query.toString()}`
+    : `/services/${serviceId}`;
+
+  try {
+    const data = await apiFetch<{ service: SMMService }>(path);
+    return data.service;
+  } catch (err) {
+    throw err;
+  }
+}
 export async function getCategories(): Promise<string[]> {
   const data = await apiFetch<{ categories: string[] }>("/categories");
   return data.categories;
 }
 
-// Authenticated
+export async function startGuestCheckout(
+  params: GuestCheckoutParams
+): Promise<GuestCheckoutResult> {
+  return guestApiFetch<GuestCheckoutResult>('/guest-orders/checkout', {
+    method: 'POST',
+    body: JSON.stringify(params),
+  })
+}
+
 export async function createOrder(
   params: CreateOrderParams,
   token: string
@@ -90,14 +149,17 @@ export async function syncOrderStatus(
   return apiFetch(`/order/${orderId}`, {}, token);
 }
 
-export async function cancelOrder(
-  orderId: string,
-  token: string
-): Promise<{ success: boolean }> {
-  return apiFetch<{ success: boolean }>("/cancel", {
-    method: "POST",
-    body: JSON.stringify({ orderId }),
-  }, token);
+export async function cancelOrder(orderId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    await apiFetch<{ success: boolean }>("/cancel", {
+      method: "POST",
+      body: JSON.stringify({ orderId }),
+    });
+    return { success: true };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to cancel order";
+    return { success: false, error: message };
+  }
 }
 
 export interface FrequentService {
