@@ -34,9 +34,9 @@ const OrderWidget = forwardRef<OrderWidgetHandle, { compact?: boolean }>(
         })
 
         return (
-            <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px] items-start">
+            <div className="flex flex-col gap-6 lg:grid lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
                 {/* Left column — service browsing */}
-                <div className="min-w-0">
+                <div className="min-w-0 w-full">
                     <ServiceSelector
                         {...state}
                         onSelect={(service) => state.selectService(service)}
@@ -46,7 +46,7 @@ const OrderWidget = forwardRef<OrderWidgetHandle, { compact?: boolean }>(
                 </div>
 
                 {/* Right column — order form, sticky on scroll so it stays visible while browsing services */}
-                <div className="lg:sticky lg:top-4">
+                <div className="w-full lg:sticky lg:top-4">
                     {state.selectedService ? (
                         <div className="space-y-4 rounded-lg border border-border p-4">
                             <div className="text-sm font-medium line-clamp-2">

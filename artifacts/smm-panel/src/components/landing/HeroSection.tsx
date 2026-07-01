@@ -203,7 +203,7 @@ export default function HeroSection() {
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.9, duration: 0.5 }}
-                className="absolute -top-5 -right-4 rounded-xl bg-card border border-border px-4 py-3 shadow-lg flex items-center gap-3 animate-float"
+                className="absolute -top-5 right-0 rounded-xl bg-card border border-border px-4 py-3 shadow-lg flex items-center gap-3 animate-float"
               >
                 <div className="h-8 w-8 rounded-lg bg-emerald-500/10 flex items-center justify-center">
                   <Zap className="h-4 w-4 text-emerald-500" />
@@ -219,7 +219,7 @@ export default function HeroSection() {
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 1.1, duration: 0.5 }}
-                className="absolute -bottom-5 -left-4 rounded-xl bg-card border border-border px-4 py-3 shadow-lg flex items-center gap-3 animate-float-delayed"
+                className="absolute -bottom-5 left-0 rounded-xl bg-card border border-border px-4 py-3 shadow-lg flex items-center gap-3 animate-float-delayed"
               >
                 <div className="h-8 w-8 rounded-lg bg-emerald-500/10 flex items-center justify-center">
                   <Users className="h-4 w-4 text-emerald-500" />

@@ -1,5 +1,6 @@
-import { Outlet } from 'react-router-dom'
+import { Outlet, Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
+import { ArrowLeft } from 'lucide-react'
 
 export default function AuthLayout() {
   return (
@@ -13,14 +14,14 @@ export default function AuthLayout() {
             transition={{ duration: 0.8 }}
           >
             <div className="mb-8">
-              <div className="flex items-center gap-3 mb-8">
+              <Link to="/" className="flex items-center gap-3 mb-8 hover:opacity-80 transition-opacity">
                 <div className="h-12 w-12 rounded-xl bg-white/10 backdrop-blur flex items-center justify-center">
                   <svg className="h-7 w-7 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
                   </svg>
                 </div>
-                <span className="text-3xl font-bold text-white tracking-tight">SMMHub</span>
-              </div>
+                <span className="text-3xl font-bold text-white tracking-tight">SSMM</span>
+              </Link>
               <h1 className="text-4xl xl:text-5xl font-bold text-white leading-tight mb-6">
                 Scale Your Social Media<br />
                 <span className="text-emerald-400">With Confidence</span>
@@ -60,14 +61,24 @@ export default function AuthLayout() {
       </div>
       <div className="flex-1 flex flex-col justify-center px-6 py-12 lg:px-8 bg-background">
         <div className="sm:mx-auto sm:w-full sm:max-w-md">
-          <div className="lg:hidden flex items-center justify-center gap-2 mb-8">
+          <Link to="/" className="lg:hidden flex items-center justify-center gap-2 mb-8 hover:opacity-80 transition-opacity">
             <div className="h-10 w-10 rounded-xl bg-emerald-500/10 flex items-center justify-center">
               <svg className="h-6 w-6 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
               </svg>
             </div>
-            <span className="text-2xl font-bold text-foreground">SMMHub</span>
-          </div>
+            <span className="text-2xl font-bold text-foreground">SSMM</span>
+          </Link>
+
+          {/* Back to home link */}
+          <Link
+            to="/"
+            className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-6 transition-colors"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to home
+          </Link>
+
           <Outlet />
         </div>
       </div>

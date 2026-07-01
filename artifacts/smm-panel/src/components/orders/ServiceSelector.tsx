@@ -24,13 +24,13 @@ export default function ServiceSelector(
     } = props
 
     return (
-        <div>
-            <div className="flex flex-col sm:flex-row gap-2 mb-4">
-                <div className="relative w-full sm:w-64">
+        <div className="w-full">
+            <div className="flex flex-col gap-2 mb-4">
+                <div className="relative w-full">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
                         placeholder="Search services..."
-                        className="pl-9 pr-8 h-9 text-sm"
+                        className="pl-9 pr-8 h-9 text-sm w-full"
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
                     />
@@ -45,7 +45,7 @@ export default function ServiceSelector(
                 </div>
 
                 <Select value={selectedCategory} onValueChange={setSelectedCategory} disabled={categoriesLoading}>
-                    <SelectTrigger className="w-full sm:flex-1 h-9 text-sm">
+                    <SelectTrigger className="w-full h-9 text-sm">
                         <Filter className="mr-2 h-3.5 w-3.5 shrink-0" />
                         {categoriesLoading ? (
                             <span className="flex items-center gap-2 text-muted-foreground">
@@ -65,7 +65,7 @@ export default function ServiceSelector(
             </div>
 
             {!servicesLoading && selectedCategory !== 'all' && (
-                <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
                     <p className="text-xs text-muted-foreground">
                         {services.length} service{services.length !== 1 ? 's' : ''}
                         {debouncedSearch && ` matching "${debouncedSearch}"`}
@@ -82,7 +82,7 @@ export default function ServiceSelector(
             )}
 
             {servicesLoading ? (
-                <div className="grid gap-3 sm:grid-cols-2">
+                <div className="grid gap-3 grid-cols-1 sm:grid-cols-2">
                     {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-24 w-full" />)}
                 </div>
             ) : selectedCategory === 'all' ? (
@@ -96,7 +96,7 @@ export default function ServiceSelector(
                     <p className="text-sm">No services found</p>
                 </div>
             ) : (
-                <div className={`grid gap-3 sm:grid-cols-2 ${maxHeight} overflow-y-auto pr-2`}>
+                <div className={`grid gap-3 grid-cols-1 sm:grid-cols-2 ${maxHeight} overflow-y-auto pr-1`}>
                     {services.map((service) => {
                         const isSelected = service.service === selectedServiceId
                         return (
@@ -108,22 +108,19 @@ export default function ServiceSelector(
                                     }`}
                                 onClick={() => onSelect(service)}
                             >
-
-
-                                <div className={`text-sm font-medium line-clamp-2 mb-2 transition-colors ${isSelected ? 'text-emerald-500' : 'group-hover:text-emerald-500'
-                                    }`}>
-                                    {service.name}
+                                <div className="flex items-start justify-between gap-2 mb-1">
+                                    <div className={`text-sm font-medium line-clamp-2 transition-colors ${isSelected ? 'text-emerald-500' : 'group-hover:text-emerald-500'}`}>
+                                        {service.name}
+                                    </div>
+                                    {isSelected && <Check className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />}
                                 </div>
 
-                                <div className="flex items-center justify-between text-xs mt-auto">
-                                    <div className="flex items-start justify-between gap-2 mb-1.5">
-                                        <span className="text-xs text-muted-foreground">ID: {service.service}</span>
-                                        {isSelected && <Check className="h-3.5 w-3.5 text-emerald-500 shrink-0" />}
-                                    </div>
+                                <div className="flex items-center gap-2 text-xs mt-auto flex-wrap">
+                                    <span className="text-muted-foreground">ID: {service.service}</span>
                                     <span className="font-semibold text-emerald-500">₹{Number(service.rate).toFixed(4)}/1K</span>
-                                    <span className="text-muted-foreground">
-                                        {Number(service.min).toLocaleString()} – {Number(service.max).toLocaleString()}
-                                    </span>
+                                </div>
+                                <div className="text-xs text-muted-foreground mt-1">
+                                    Min: {Number(service.min).toLocaleString()} • Max: {Number(service.max).toLocaleString()}
                                 </div>
                             </div>
                         )
