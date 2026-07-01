@@ -180,6 +180,8 @@ router.get("/gateways", requireAuth, async (req, res) => {
 router.post("/create-order", requireAuth, async (req, res) => {
   const userId = req.userId!;
   const amountINR = Number(req.body?.amountINR);
+  const flow = req.body?.flow as 'wallet_topup' | 'public_order' | undefined;
+  const returnTo = req.body?.returnTo as string | undefined;
 
   if (!amountINR || amountINR < 1) {
     return res.status(400).json({ error: "Invalid amount" });
@@ -229,6 +231,8 @@ router.post("/create-order", requireAuth, async (req, res) => {
           customerId: userId,
           customerEmail,
           orderId,
+          flow,
+          returnTo,
         });
 
         // Store the provider order id.
@@ -388,6 +392,128 @@ router.post("/verify", requireAuth, async (req, res) => {
     });
   } catch (err) {
     logger.error({ err, userId, orderId }, "verify error");
+    return res.status(500).json({ error: "Payment verification failed" });
+  }
+});
+
+// ── POST /api/payment/verify-public ───────────────────────────────────────────
+// Public endpoint for the PaymentReturnPage to verify payments without auth.
+// Uses orderId (UUID, hard to guess) for verification. Only works for orders
+// that haven't been paid yet. Does NOT credit wallet for guest orders - that
+// is handled by the webhook.
+router.post("/verify-public", async (req, res) => {
+  const { orderId } = req.body as { orderId?: string };
+
+  if (!orderId) {
+    return res.status(400).json({ error: "Missing orderId" });
+  }
+
+  try {
+    const { data: order, error } = await supabaseAdmin
+      .from("payment_orders")
+      .select("*")
+      .eq("id", orderId)
+      .maybeSingle();
+
+    if (error || !order) {
+      return res.status(404).json({ error: "Order not found" });
+    }
+
+    if (order.status === "paid") {
+      return res.json({
+        success: true,
+        alreadyCredited: true,
+        provider: order.provider,
+        amountINR: Number(order.amount_inr),
+        currency: "INR",
+      });
+    }
+
+    if (order.provider === "razorpay") {
+      return res.status(400).json({
+        error: "Use the Razorpay-specific verify endpoint for Razorpay orders",
+      });
+    }
+
+    if (!order.provider_order_id) {
+      return res.status(400).json({ error: "Order has no provider order id" });
+    }
+
+    const status = await fetchPaymentStatus(
+      order.provider as ProviderKey,
+      order.provider_order_id
+    );
+
+    if (status.status !== "paid") {
+      return res.json({
+        success: false,
+        status: status.status,
+        message: status.status === "pending"
+          ? "Payment is still being processed. If you have paid, please wait a moment and try again."
+          : "Payment was not completed or failed. Please try again.",
+      });
+    }
+
+    // Amount verification
+    if (status.amountINR && Math.abs(status.amountINR - Number(order.amount_inr)) > 0.01) {
+      logger.error(
+        {
+          orderId,
+          expected: order.amount_inr,
+          actual: status.amountINR,
+        },
+        "Amount mismatch — possible fraud attempt"
+      );
+      await supabaseAdmin
+        .from("payment_orders")
+        .update({
+          status: "failed",
+          failure_reason: `Amount mismatch: expected ₹${order.amount_inr}, got ₹${status.amountINR}`,
+        })
+        .eq("id", orderId);
+      return res.status(400).json({
+        error: "Payment amount does not match the order amount. Please contact support.",
+      });
+    }
+
+    const amountINR = Number(order.amount_inr);
+    const userId = order.user_id;
+
+    // Credit the wallet
+    const { newBalance, duplicate, currency: walletCurrency } = await creditWallet(
+      userId,
+      amountINR,
+      "INR",
+      order.provider as ProviderKey,
+      status.providerPaymentId || order.provider_order_id
+    );
+
+    // Mark the order paid.
+    await supabaseAdmin
+      .from("payment_orders")
+      .update({
+        status: "paid",
+        provider_payment_id: status.providerPaymentId,
+        amount_usd: walletCurrency === "INR" ? null : amountINR,
+        paid_at: new Date().toISOString(),
+      })
+      .eq("id", orderId);
+
+    logger.info(
+      { userId, orderId, provider: order.provider, amountINR, walletCurrency, duplicate },
+      "Wallet credited via public verify"
+    );
+
+    return res.json({
+      success: true,
+      duplicate,
+      provider: order.provider,
+      amountINR,
+      currency: walletCurrency,
+      newBalance,
+    });
+  } catch (err) {
+    logger.error({ err, orderId }, "public verify error");
     return res.status(500).json({ error: "Payment verification failed" });
   }
 });

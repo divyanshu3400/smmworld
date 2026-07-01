@@ -21,6 +21,7 @@ const FAQPage = lazy(() => import('@/pages/public/FAQPage'))
 const PricingPage = lazy(() => import('@/pages/public/PricingPage'))
 const ComingSoonPage = lazy(() => import('@/pages/public/ComingSoonPage'))
 const NotFoundPage = lazy(() => import('@/pages/public/NotFoundPage'))
+const PaymentReturnPage = lazy(() => import('@/pages/payment/PaymentReturnPage'))
 
 // Auth pages
 const LoginPage = lazy(() => import('@/pages/auth/LoginPage'))
@@ -76,6 +77,7 @@ export const router = createBrowserRouter([
       { path: 'pricing', element: withSuspense(PricingPage) },
       { path: 'coming-soon', element: withSuspense(ComingSoonPage) },
       { path: '404', element: withSuspense(NotFoundPage) },
+      { path: 'payment/return', element: withSuspense(PaymentReturnPage) },
     ],
   },
   { path: 'auth/callback', element: withSuspense(AuthCallbackPage) },

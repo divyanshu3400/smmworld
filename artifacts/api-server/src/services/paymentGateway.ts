@@ -26,6 +26,8 @@ export interface CreateOrderInput {
   customerEmail: string;
   customerPhone?: string;
   orderId: string; // our internal payment_orders.id
+  flow?: 'wallet_topup' | 'public_order';
+  returnTo?: string;
 }
 
 export interface CreateOrderResult {
@@ -75,6 +77,12 @@ async function cashfreeCreateOrder(
   const creds = cashfreeCreds();
   if (!creds) throw new Error("Cashfree credentials not configured");
 
+  // Build return URL with flow metadata
+  const flow = input.flow || 'wallet_topup';
+  const params = new URLSearchParams({ order_id: input.orderId, flow });
+  if (input.returnTo) params.set('returnTo', input.returnTo);
+  const returnUrl = `${process.env.FRONTEND_URL || ""}/payment/return?${params.toString()}`;
+
   const res = await fetch(`${CASHFREE_BASE}/orders`, {
     method: "POST",
     headers: {
@@ -93,7 +101,7 @@ async function cashfreeCreateOrder(
         customer_phone: input.customerPhone || "9999999999",
       },
       order_meta: {
-        return_url: `${process.env.FRONTEND_URL || ""}/wallet?order_id=${input.orderId}`,
+        return_url: returnUrl,
       },
     }),
   });
@@ -114,7 +122,7 @@ async function cashfreeCreateOrder(
     provider: "cashfree",
     providerOrderId: body.order_id || input.orderId,
     sessionId: body.payment_session_id,
-    redirectUrl: `${process.env.FRONTEND_URL || ""}/wallet?order_id=${input.orderId}`
+    redirectUrl: returnUrl
   };
 }
 
@@ -198,6 +206,12 @@ async function payuCreateOrder(
   const firstname = input.customerEmail.split("@")[0] || "User";
   const email = input.customerEmail;
 
+  // Build return URL with flow metadata
+  const flow = input.flow || 'wallet_topup';
+  const params = new URLSearchParams({ order_id: txnid, provider: 'payu', flow });
+  if (input.returnTo) params.set('returnTo', input.returnTo);
+  const returnUrl = `${process.env.FRONTEND_URL || ""}/payment/return?${params.toString()}`;
+
   // PayU hash sequence for the request:
   // key|txnid|amount|productinfo|firstname|email|udf1|udf2|udf3|udf4|udf5||||||salt
   const hashString = [
@@ -206,7 +220,7 @@ async function payuCreateOrder(
   ].join("|");
   const hash = payuHash(creds.key, creds.salt, hashString.split("|"));
 
-  const params: Record<string, string> = {
+  const paramsForm: Record<string, string> = {
     key: creds.key,
     txnid,
     amount,
@@ -214,15 +228,15 @@ async function payuCreateOrder(
     firstname,
     email,
     hash,
-    surl: `${process.env.FRONTEND_URL || ""}/wallet?order_id=${txnid}&provider=payu`,
-    furl: `${process.env.FRONTEND_URL || ""}/wallet?order_id=${txnid}&provider=payu`,
+    surl: returnUrl,
+    furl: returnUrl,
   };
 
   return {
     provider: "payu",
     providerOrderId: txnid,
     redirectUrl: `${PAYU_BASE}/_payment`,
-    redirectParams: params,
+    redirectParams: paramsForm,
   };
 }
 

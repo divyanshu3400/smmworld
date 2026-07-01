@@ -8,6 +8,14 @@ export interface CreateOrderResponse {
   amountINR: number
 }
 
+export type PaymentFlow = 'wallet_topup' | 'public_order'
+
+export interface CreateOrderOptions {
+  amountINR: number
+  flow?: PaymentFlow
+  returnTo?: string
+}
+
 
 function loadRazorpayScript(): Promise<boolean> {
     return new Promise((resolve) => {

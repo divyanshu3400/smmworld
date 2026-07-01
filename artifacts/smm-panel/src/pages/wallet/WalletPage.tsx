@@ -41,7 +41,8 @@ import {
 import { toast } from 'sonner'
 import { TRANSACTION_TYPES } from '@/lib/constants'
 import { supabase } from '@/lib/supabase'
-import { CreateOrderResponse, launchPaymentGateway } from '@/lib/launchPaymentGateway'
+import { CreateOrderResponse, launchPaymentGateway, type PaymentFlow } from '@/lib/launchPaymentGateway'
+import { usePaymentVerification, verifyGatewayPayment, pollOrderStatus } from '@/hooks/usePaymentVerification'
 
 declare global {
   interface Window {
@@ -89,51 +90,18 @@ async function getAuthToken(): Promise<string> {
 }
 
 
-async function createGatewayOrder(amountINR: number): Promise<CreateOrderResponse> {
+async function createGatewayOrder(amountINR: number, flow: PaymentFlow = 'wallet_topup', returnTo?: string): Promise<CreateOrderResponse> {
   const token = await getAuthToken()
   const res = await fetch(apiUrl('/api/payment/create-order'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ amountINR }),
+    body: JSON.stringify({ amountINR, flow, returnTo }),
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
     throw new Error(err.error || 'Failed to create payment order')
   }
   return res.json()
-}
-
-async function verifyGatewayPayment(orderId: string): Promise<{
-  success: boolean
-  status?: string
-  message?: string
-  alreadyCredited?: boolean
-  provider?: string
-  amountINR?: number
-  currency?: string
-  newBalance?: number
-}> {
-  const token = await getAuthToken()
-  const res = await fetch(apiUrl('/api/payment/verify'), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ orderId }),
-  })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error(err.error || 'Payment verification failed')
-  }
-  return res.json()
-}
-
-async function pollOrderStatus(orderId: string): Promise<string> {
-  const token = await getAuthToken()
-  const res = await fetch(apiUrl(`/api/payment/order/${orderId}/status`), {
-    headers: { Authorization: `Bearer ${token}` },
-  })
-  if (!res.ok) throw new Error('Failed to check order status')
-  const data = await res.json()
-  return data.status
 }
 
 type PaymentState = 'idle' | 'creating' | 'waiting' | 'verifying' | 'done' | 'failed'
@@ -296,7 +264,9 @@ export default function WalletPage() {
     setStatusMessage('')
 
     try {
-      const order = await createGatewayOrder(amount)
+      // Build returnTo URL if we have a pending redirect after topup
+      const returnTo = pendingReturnTo ? `/wallet?returnTo=${encodeURIComponent(pendingReturnTo)}` : undefined
+      const order = await createGatewayOrder(amount, 'wallet_topup', returnTo)
       await launchPaymentGateway(order, {
         onOrderCreated: (orderId) => setActiveOrderId(orderId),
         onWaiting: (message) => {
