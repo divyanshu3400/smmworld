@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Loader as Loader2 } from 'lucide-react'
+import { Loader as Loader2, Wallet, CircleAlert as AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
 import { createOrder } from '@/services/orders.service'
@@ -21,6 +21,7 @@ export default function AuthenticatedSubmitFooter({
 
     const price = calculatePrice()
     const insufficientBalance = !!wallet && price > 0 && Number(wallet.balance) < price
+    const canSubmit = selectedService && orderLink.length > 3 && orderQuantity
 
     const createOrderMutation = useMutation({
         mutationFn: async () => {
@@ -56,19 +57,25 @@ export default function AuthenticatedSubmitFooter({
 
     if (insufficientBalance) {
         return (
-            <div className="space-y-2">
-                <p className="text-sm text-red-500">
-                    You need ₹{(price - Number(wallet!.balance)).toFixed(2)} more to place this order.
-                </p>
+            <div className="space-y-3">
+                <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
+                    <AlertCircle className="h-5 w-5 text-destructive shrink-0" />
+                    <div>
+                        <p className="text-sm font-medium text-foreground">Insufficient balance</p>
+                        <p className="text-xs text-muted-foreground">
+                            You need ₹{(price - Number(wallet!.balance)).toFixed(2)} more
+                        </p>
+                    </div>
+                </div>
                 <Button
-                    className="w-full bg-emerald-500 hover:bg-emerald-600"
-
+                    className="w-full h-11 text-base font-semibold bg-emerald-500 hover:bg-emerald-600"
                     onClick={() => {
                         const shortfall = Math.ceil(price - Number(wallet!.balance))
                         const returnTo = encodeURIComponent('/dashboard/orders')
                         window.location.href = `/dashboard/wallet?topup=${shortfall}&returnTo=${returnTo}`
                     }}
                 >
+                    <Wallet className="mr-2 h-4 w-4" />
                     Add Funds to Continue
                 </Button>
             </div>
@@ -77,12 +84,12 @@ export default function AuthenticatedSubmitFooter({
 
     return (
         <Button
-            className="w-full bg-emerald-500 hover:bg-emerald-600"
+            className="w-full h-12 text-base font-semibold bg-emerald-500 hover:bg-emerald-600"
             onClick={() => createOrderMutation.mutateAsync().catch(() => { })}
-            disabled={createOrderMutation.isPending || !selectedService}
+            disabled={createOrderMutation.isPending || !canSubmit}
         >
             {createOrderMutation.isPending
-                ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Processing...</>
+                ? <><Loader2 className="mr-2 h-5 w-5 animate-spin" />Processing...</>
                 : 'Place Order'}
         </Button>
     )
