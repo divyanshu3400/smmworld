@@ -81,7 +81,7 @@ export default function OrderDetailsForm({
     return values.filter((v, i, arr) => v > 0 && arr.indexOf(v) === i).slice(0, 4)
   }, [minQty, maxQty])
 
-  const avgDeliveryHours = selectedService.avg_time ? parseInt(selectedService.avg_time) : null
+  // const avgDeliveryHours = selectedService.avg_time ? parseInt(selectedService.avg_time) : null
 
   return (
     <div className="space-y-4">
@@ -170,7 +170,7 @@ export default function OrderDetailsForm({
           <span className="text-sm text-muted-foreground">Rate per 1,000:</span>
           <span className="font-medium">₹{rate.toFixed(4)}</span>
         </div>
-        {avgDeliveryHours && (
+        {/* {avgDeliveryHours && (
           <div className="flex justify-between mb-2">
             <span className="text-sm text-muted-foreground flex items-center gap-1">
               <Zap className="h-3 w-3" />
@@ -180,7 +180,7 @@ export default function OrderDetailsForm({
               {avgDeliveryHours < 1 ? 'Under 1 hour' : avgDeliveryHours < 24 ? `~${avgDeliveryHours}h` : `~${Math.ceil(avgDeliveryHours / 24)} days`}
             </span>
           </div>
-        )}
+        )} */}
         {walletBalance !== undefined && (
           <div className="flex justify-between mb-2">
             <span className="text-sm text-muted-foreground">Your balance:</span>
@@ -198,6 +198,3 @@ export default function OrderDetailsForm({
     </div>
   )
 }
-
-
-export default OrderDetailsForm
