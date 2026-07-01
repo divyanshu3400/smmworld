@@ -6,6 +6,9 @@ import PageHero from '@/components/landing/PageHero'
 import SectionHeading from '@/components/landing/SectionHeading'
 import CTASection from '@/components/landing/CTASection'
 import { useCurrency } from '@/contexts/CurrencyContext'
+import SEO from '@/components/seo/SEO'
+import { BreadcrumbJsonLD } from '@/components/seo/JsonLD'
+import { pageSEO } from '@/components/seo/seo-data'
 
 const fadeUp = {
   hidden: { opacity: 0, y: 24 },
@@ -122,6 +125,13 @@ export default function PricingPage() {
 
   return (
     <div className="min-h-screen bg-background">
+      <SEO {...pageSEO.pricing} />
+      <BreadcrumbJsonLD
+        items={[
+          { name: 'Home', url: 'https://ssmm.online/' },
+          { name: 'Pricing', url: 'https://ssmm.online/pricing' },
+        ]}
+      />
       <PageHero
         badge="Pricing"
         title="Simple, transparent pricing"

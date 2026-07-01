@@ -5,6 +5,9 @@ import { Link } from 'react-router-dom'
 import PageHero from '@/components/landing/PageHero'
 import SectionHeading from '@/components/landing/SectionHeading'
 import CTASection from '@/components/landing/CTASection'
+import SEO from '@/components/seo/SEO'
+import { FAQJsonLD, BreadcrumbJsonLD } from '@/components/seo/JsonLD'
+import { pageSEO, faqData } from '@/components/seo/seo-data'
 
 const fadeUp = {
   hidden: { opacity: 0, y: 24 },
@@ -71,6 +74,14 @@ export default function FAQPage() {
 
   return (
     <div className="min-h-screen bg-background">
+      <SEO {...pageSEO.faq} />
+      <BreadcrumbJsonLD
+        items={[
+          { name: 'Home', url: 'https://ssmm.online/' },
+          { name: 'FAQ', url: 'https://ssmm.online/faq' },
+        ]}
+      />
+      <FAQJsonLD questions={faqData} />
       <PageHero
         badge="FAQ"
         title="Frequently asked questions"

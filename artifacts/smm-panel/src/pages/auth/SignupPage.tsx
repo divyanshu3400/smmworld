@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Loader2, Check, Eye, EyeOff } from 'lucide-react'
+import { Loader as Loader2, Check, Eye, EyeOff } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { signupSchema, getPasswordStrength } from '@/lib/validators'
 import { Button } from '@/components/ui/button'
@@ -18,6 +18,8 @@ import {
 } from '@/components/ui/form'
 import { Separator } from '@/components/ui/separator'
 import { Progress } from '@/components/ui/progress'
+import SEO from '@/components/seo/SEO'
+import { pageSEO } from '@/components/seo/seo-data'
 import type { z } from 'zod'
 
 type SignupFormData = z.infer<typeof signupSchema>
@@ -117,6 +119,7 @@ export default function SignupPage() {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5 }}
     >
+      <SEO {...pageSEO.signup} />
       <div className="text-center mb-8">
         <h2 className="text-3xl font-bold text-foreground">Create an account</h2>
         <p className="mt-2 text-muted-foreground">

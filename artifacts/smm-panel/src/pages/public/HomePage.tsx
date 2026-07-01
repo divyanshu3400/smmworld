@@ -10,10 +10,20 @@ import Reviews from '@/components/landing/Reviews'
 import FAQ from '@/components/landing/FAQ'
 import FinalCTA from '@/components/landing/FinalCTA'
 import InstantOrderSection from './InstantOrderSection'
+import SEO from '@/components/seo/SEO'
+import { FAQJsonLD, HowToJsonLD } from '@/components/seo/JsonLD'
+import { pageSEO, faqData, howToSteps } from '@/components/seo/seo-data'
 
 export default function HomePage() {
   return (
     <div className="min-h-screen bg-background">
+      <SEO {...pageSEO.home} />
+      <FAQJsonLD questions={faqData} />
+      <HowToJsonLD
+        name="How to Order on SSMM"
+        description="Follow these simple steps to place your first social media marketing order on SSMM"
+        steps={howToSteps}
+      />
       <HeroSection />
       <InstantOrderSection />
       <TrustBar />

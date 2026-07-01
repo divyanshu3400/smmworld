@@ -4,6 +4,9 @@ import { motion } from 'framer-motion'
 import { Search, Clock, ArrowRight, TrendingUp, Mail, Check } from 'lucide-react'
 import PageHero from '@/components/landing/PageHero'
 import SectionHeading from '@/components/landing/SectionHeading'
+import SEO from '@/components/seo/SEO'
+import { BreadcrumbJsonLD } from '@/components/seo/JsonLD'
+import { pageSEO } from '@/components/seo/seo-data'
 
 const fadeUp = {
   hidden: { opacity: 0, y: 24 },
@@ -60,6 +63,13 @@ export default function BlogPage() {
 
   return (
     <div className="min-h-screen bg-background">
+      <SEO {...pageSEO.blog} />
+      <BreadcrumbJsonLD
+        items={[
+          { name: 'Home', url: 'https://ssmm.online/' },
+          { name: 'Blog', url: 'https://ssmm.online/blog' },
+        ]}
+      />
       <PageHero
         badge="Blog"
         title="Insights, tips & growth strategies"

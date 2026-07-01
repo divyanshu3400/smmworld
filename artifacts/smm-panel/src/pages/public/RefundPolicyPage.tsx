@@ -8,6 +8,8 @@ import { faqs as faqData } from '@/components/landing/landing-data'
 import { useState } from 'react'
 import { AnimatePresence } from 'framer-motion'
 import { ChevronDown } from 'lucide-react'
+import SEO from '@/components/seo/SEO'
+import { pageSEO } from '@/components/seo/seo-data'
 
 const fadeUp = {
   hidden: { opacity: 0, y: 24 },
@@ -48,6 +50,7 @@ export default function RefundPolicyPage() {
 
   return (
     <div className="min-h-screen bg-background">
+      <SEO {...pageSEO.refund} />
       <ReadingProgress />
       <PageHero
         badge="Refund Policy"

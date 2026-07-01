@@ -1,2 +1,66 @@
+# SSMM robots.txt
+# https://ssmm.online
+
 User-agent: *
 Allow: /
+
+# Sitemap location
+Sitemap: https://ssmm.online/sitemap.xml
+
+# Disallow private/authenticated areas
+Disallow: /dashboard
+Disallow: /orders
+Disallow: /wallet
+Disallow: /settings
+Disallow: /profile
+Disallow: /notifications
+Disallow: /referral
+Disallow: /admin
+
+# Allow important crawlers
+User-agent: Googlebot
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
+User-agent: Slurp
+Allow: /
+
+# AI assistant crawlers
+User-agent: GPTBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: Claude-Web
+Allow: /
+
+User-agent: Anthropic-AI
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Applebot
+Allow: /
+
+# Social media crawlers
+User-agent: facebookexternalhit
+Allow: /
+
+User-agent: Twitterbot
+Allow: /
+
+User-agent: LinkedInBot
+Allow: /
+
+User-agent: WhatsApp
+Allow: /
+
+User-agent: TelegramBot
+Allow: /
+
+# Crawl delay for politeness
+Crawl-delay: 1

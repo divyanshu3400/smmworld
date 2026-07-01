@@ -18,6 +18,8 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 import { Separator } from '@/components/ui/separator'
+import SEO from '@/components/seo/SEO'
+import { pageSEO } from '@/components/seo/seo-data'
 import type { z } from 'zod'
 
 type LoginFormData = z.infer<typeof loginSchema>
@@ -80,6 +82,7 @@ export default function LoginPage() {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5 }}
     >
+      <SEO {...pageSEO.login} />
       <div className="text-center mb-8">
         <h2 className="text-3xl font-bold text-foreground">Welcome back</h2>
         <p className="mt-2 text-muted-foreground">

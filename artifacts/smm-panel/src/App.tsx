@@ -1,5 +1,6 @@
 import { RouterProvider } from 'react-router-dom'
 import { QueryClientProvider } from '@tanstack/react-query'
+import { HelmetProvider } from 'react-helmet-async'
 import { AuthProvider } from '@/contexts/AuthContext'
 import { CurrencyProvider } from '@/contexts/CurrencyContext'
 import { ThemeProvider } from '@/contexts/ThemeContext'
@@ -10,13 +11,14 @@ import ChatWidget from '@/components/chat/ChatWidget'
 
 function App() {
   return (
-    <ThemeProvider>
-      <QueryClientProvider client={queryClient}>
-        <AuthProvider>
-          <CurrencyProvider>
-            <RouterProvider router={router} />
-            <ChatWidget />
-            <Toaster
+    <HelmetProvider>
+      <ThemeProvider>
+        <QueryClientProvider client={queryClient}>
+          <AuthProvider>
+            <CurrencyProvider>
+              <RouterProvider router={router} />
+              <ChatWidget />
+              <Toaster
               position="top-right"
               toastOptions={{
                 classNames: {
@@ -32,6 +34,7 @@ function App() {
         </AuthProvider>
       </QueryClientProvider>
     </ThemeProvider>
+    </HelmetProvider>
   )
 }
 

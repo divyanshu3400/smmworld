@@ -4,6 +4,9 @@ import PageHero from '@/components/landing/PageHero'
 import SectionHeading from '@/components/landing/SectionHeading'
 import CTASection from '@/components/landing/CTASection'
 import { CountUp } from '@/components/ui/CountUp'
+import SEO from '@/components/seo/SEO'
+import { BreadcrumbJsonLD, OrganizationJsonLD } from '@/components/seo/JsonLD'
+import { pageSEO } from '@/components/seo/seo-data'
 
 const fadeUp = {
   hidden: { opacity: 0, y: 24 },
@@ -45,6 +48,14 @@ const team = [
 export default function AboutPage() {
   return (
     <div className="min-h-screen bg-background">
+      <SEO {...pageSEO.about} />
+      <BreadcrumbJsonLD
+        items={[
+          { name: 'Home', url: 'https://ssmm.online/' },
+          { name: 'About', url: 'https://ssmm.online/about' },
+        ]}
+      />
+      <OrganizationJsonLD />
       <PageHero
         badge="About Us"
         title="Building the future of social media growth"

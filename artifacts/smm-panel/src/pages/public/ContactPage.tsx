@@ -3,6 +3,9 @@ import { motion } from 'framer-motion'
 import { Mail, MessageSquare, Phone, Briefcase, Headphones, Clock, MapPin, Send, Check, Battery as Twitter, Notebook as Facebook, Drama as Instagram, Link as Linkedin } from 'lucide-react'
 import PageHero from '@/components/landing/PageHero'
 import SectionHeading from '@/components/landing/SectionHeading'
+import SEO from '@/components/seo/SEO'
+import { BreadcrumbJsonLD } from '@/components/seo/JsonLD'
+import { pageSEO } from '@/components/seo/seo-data'
 
 const fadeUp = {
   hidden: { opacity: 0, y: 24 },
@@ -47,6 +50,13 @@ export default function ContactPage() {
 
   return (
     <div className="min-h-screen bg-background">
+      <SEO {...pageSEO.contact} />
+      <BreadcrumbJsonLD
+        items={[
+          { name: 'Home', url: 'https://ssmm.online/' },
+          { name: 'Contact', url: 'https://ssmm.online/contact' },
+        ]}
+      />
       <PageHero
         badge="Contact Us"
         title="We are here to help"

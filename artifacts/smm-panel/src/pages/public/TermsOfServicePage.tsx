@@ -4,6 +4,8 @@ import PageHero from '@/components/landing/PageHero'
 import ReadingProgress from '@/components/landing/ReadingProgress'
 import TableOfContents from '@/components/landing/TableOfContents'
 import CTASection from '@/components/landing/CTASection'
+import SEO from '@/components/seo/SEO'
+import { pageSEO } from '@/components/seo/seo-data'
 
 const fadeUp = {
   hidden: { opacity: 0, y: 24 },
@@ -130,6 +132,7 @@ const content: Record<string, { title: string; body: string[] }> = {
 export default function TermsOfServicePage() {
   return (
     <div className="min-h-screen bg-background">
+      <SEO {...pageSEO.terms} />
       <ReadingProgress />
       <PageHero
         badge="Terms of Service"

@@ -17,6 +17,9 @@ import { Link } from 'react-router-dom'
 import { useCurrency } from '@/contexts/CurrencyContext'
 import PageHero from '@/components/landing/PageHero'
 import CTASection from '@/components/landing/CTASection'
+import SEO from '@/components/seo/SEO'
+import { BreadcrumbJsonLD } from '@/components/seo/JsonLD'
+import { pageSEO } from '@/components/seo/seo-data'
 
 const platformIcons: Record<string, React.ComponentType<{ className?: string }>> = {
   instagram: Instagram,
@@ -114,6 +117,13 @@ export default function ServicesPage() {
 
   return (
     <div className="min-h-screen bg-background">
+      <SEO {...pageSEO.services} />
+      <BreadcrumbJsonLD
+        items={[
+          { name: 'Home', url: 'https://ssmm.online/' },
+          { name: 'Services', url: 'https://ssmm.online/services' },
+        ]}
+      />
       <PageHero
         badge="Services"
         title="Browse our service catalog"

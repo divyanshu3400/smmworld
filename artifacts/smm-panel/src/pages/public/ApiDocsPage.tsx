@@ -5,6 +5,9 @@ import { Link } from 'react-router-dom'
 import PageHero from '@/components/landing/PageHero'
 import ReadingProgress from '@/components/landing/ReadingProgress'
 import CTASection from '@/components/landing/CTASection'
+import SEO from '@/components/seo/SEO'
+import { BreadcrumbJsonLD } from '@/components/seo/JsonLD'
+import { pageSEO } from '@/components/seo/seo-data'
 
 const fadeUp = {
   hidden: { opacity: 0, y: 24 },
@@ -196,6 +199,13 @@ export default function ApiDocsPage() {
 
   return (
     <div className="min-h-screen bg-background">
+      <SEO {...pageSEO.apiDocs} />
+      <BreadcrumbJsonLD
+        items={[
+          { name: 'Home', url: 'https://ssmm.online/' },
+          { name: 'API Docs', url: 'https://ssmm.online/api-docs' },
+        ]}
+      />
       <ReadingProgress />
       <PageHero
         badge="API Documentation"
